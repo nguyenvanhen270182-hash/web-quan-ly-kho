@@ -97,3 +97,45 @@ git remote add origin  https://github.com/nguyenvanhen270182-hash/web-quan-ly-kh
 # 6. Đẩy toàn bộ code lên GitHub
 git push -u origin main
 
+PHẦN 2: LẤY LINK WEB CHẠY ONLINE MIỄN PHÍ (DÙNG VERCEL)Vercel là nền tảng tốt nhất để chạy ứng dụng React/Vite,
+ tự động cập nhật web mỗi khi bạn push code mới lên GitHub.Truy cập vào vercel.com $\rightarrow$ 
+ Chọn Sign Up (hoặc Log In) $\rightarrow$ Chọn đăng nhập bằng Continue with GitHub.Sau khi vào bảng điều khiển 
+ (Dashboard), bấm nút Add New... $\rightarrow$ chọn Project.
+ Bạn sẽ thấy danh sách Repo GitHub của mình, 
+ tìm đúng repo web-quan-ly-kho $\rightarrow$ bấm nút Import.Cấu hình Environment Variables 
+ (Biến môi trường - Cực kỳ quan trọng):Nếu dự án có dùng file .env chứa VITE_SUPABASE_URL và VITE_SUPABASE_ANON_KEY, 
+ hãy mở mục Environment Variables trên Vercel ra và thêm 2 dòng key này vào.
+ Bấm nút Deploy.Đợi khoảng 30 giây đến 1 phút, Vercel sẽ thông báo thành công 
+ và cấp cho bạn một đường link công khai 
+ (dạng: [https://web-quan-ly-kho.vercel.app](https://web-quan-ly-kho.vercel.app)).⚠️ 
+ Lưu ý quan trọng trên Supabase sau khi có link web:Sau khi có link Vercel, 
+ bạn vào Supabase Dashboard $\rightarrow$ Authentication $\rightarrow$ URL Configuration:
+ Tại ô Site URL: Dán link web Vercel vừa nhận được vào
+  (ví dụ: [https://web-quan-ly-kho.vercel.app](https://web-quan-ly-kho.vercel.app)).
+Bấm Save để luồng xác thực đăng nhập/đăng ký hoạt động chuẩn xác trên môi trường web online.
+
+lấy link trên vercel:
+vào supabase:
+Cách dán vào Supabase:Vào Supabase Dashboard $\rightarrow$ 
+chọn dự án của bạn.Nhìn menu bên trái chọn Authentication 
+$\rightarrow$ chọn tiếp URL Configuration.Tại ô Site URL, 
+dán đoạn [https://web-quan-ly-kho-phi.vercel.app](https://web-quan-ly-kho-phi.vercel.app) vào.
+(Tùy chọn thêm): Tại mục Redirect URLs, bấm Add URL và dán thêm
+ [https://web-quan-ly-kho-phi.vercel.app/](https://web-quan-ly-kho-phi.vercel.app/)** 
+ (thêm /** ở cuối) để đảm bảo mọi trang con đều chuyển hướng chuẩn.Kéo xuống dưới bấm nút Save.
+ //////
+Site URL
+https://web-quan-ly-kho-phi.vercel.app
+Site URL
+Configure the default redirect URL used when a redirect URL is not specified or doesn't match one from the allow list. This value is also exposed as a template variable in the email templates section. Wildcards cannot be used here.
+Save changes
+Redirect URLs
+URLs that auth providers are permitted to redirect to post authentication. Wildcards are allowed, for example, https://*.domain.com
+Add URL
+https://web-quan-ly-kho-phi.vercel.app/**
+ /////
+
+ sau này cập nhật git hup:
+ git add .
+git commit -m "noi dung cap nhat"
+git push origin main
