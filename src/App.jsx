@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { 
   Layout, Table, Select, Button, Card, Space, 
-  message, Tag, Flex, Typography, DatePicker, Row, Col 
+  message, Tag, Flex, Typography, DatePicker, Row, Col, Tooltip 
 } from 'antd';
 import { 
   ReloadOutlined, ArrowUpOutlined, 
@@ -16,7 +16,7 @@ import ImportStock from './components/ImportStock';
 import ExportStock from './components/ExportStock';
 import { printReportHistory, exportExcelReportHistory } from './utils/exportWebUtils';
 import Auth from './components/Auth';
-import { Tooltip } from 'antd'; // Nhớ import Tooltip từ 'antd' nếu chưa có
+
 dayjs.extend(isBetween);
 
 const { Header, Content } = Layout;
@@ -55,7 +55,6 @@ export default function App() {
         const { data: { session } } = await supabase.auth.getSession();
         
         if (session?.user) {
-          // Kiểm tra xem user này đã được Admin bật is_pro = true chưa
           const { data: profile, error } = await supabase
             .from('profiles')
             .select('is_pro')
@@ -66,7 +65,6 @@ export default function App() {
             setSessionUser(session.user);
             setSelectedUser(session.user.id);
           } else {
-            // Chưa được duyệt -> hủy phiên
             await supabase.auth.signOut();
             setSessionUser(null);
             setSelectedUser(null);
@@ -85,7 +83,6 @@ export default function App() {
 
     checkUserSession();
 
-    // Lắng nghe thay đổi trạng thái đăng nhập
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
         const { data: profile } = await supabase
@@ -167,10 +164,13 @@ export default function App() {
         if (v && v !== 'null' && v !== 'nulll') vehSet.add(v);
       }
 
-      // Lọc số phiếu theo filterType hiện tại
+      // Lọc số phiếu theo filterType
+      const t = (r.type || '').toUpperCase();
       if (r.so_phieu) {
-        if (filterType === 'OUT' && r.type === 'OUT') tickSet.add(r.so_phieu.trim());
-        else if (filterType === 'IN' && r.type === 'IN') tickSet.add(r.so_phieu.trim());
+        if (filterType === 'OUT' && (t === 'OUT' || t === 'XUẤT')) tickSet.add(r.so_phieu.trim());
+        else if (filterType === 'IN' && (t === 'IN' || t === 'NHẬP')) tickSet.add(r.so_phieu.trim());
+        else if (filterType === 'ADJUST_IN' && t === 'ADJUST_IN') tickSet.add(r.so_phieu.trim());
+        else if (filterType === 'ADJUST_OUT' && t === 'ADJUST_OUT') tickSet.add(r.so_phieu.trim());
         else if (filterType === 'ALL' || filterType === 'STOCK') tickSet.add(r.so_phieu.trim());
       }
     });
@@ -200,7 +200,7 @@ export default function App() {
   };
 
   // =========================================================================
-  // LOGIC LỌC DỮ LIỆU TỔNG HỢP THEO TỪNG DROPDOWN
+  // LOGIC LỌC DỮ LIỆU TỔNG HỢP (TÍNH TỒN KHO BAO GỒM CẢ ADJUST_IN VÀ ADJUST_OUT)
   // =========================================================================
   const filteredTransactions = useMemo(() => {
     if (!transactions) return [];
@@ -218,27 +218,34 @@ export default function App() {
     if (filterType === 'STOCK') {
       const stockMap = new Map();
       transactions.forEach((row) => {
-        const lotKey = row.type === 'IN' 
-          ? (row.ref_uuid || row.stock_uuid || row.uuid) 
-          : row.stock_uuid;
+        const t = (row.type || '').toUpperCase();
+        // Nhận diện theo mã lô (hoặc fallback về tên sản phẩm nếu không có UUID)
+        const lotKey = (t === 'IN' || t === 'NHẬP') 
+          ? (row.ref_uuid || row.stock_uuid || row.uuid || row.product_name) 
+          : (row.stock_uuid || row.ref_uuid || row.product_name);
+        
         if (!lotKey) return;
 
         if (!stockMap.has(lotKey)) {
           stockMap.set(lotKey, {
             ...row,
             key: lotKey,
-            id: `TON_${lotKey.slice(-6)}`,
+            id: `TON_${String(lotKey).slice(-6)}`,
             type: 'STOCK',
             in_qty: 0,
             out_qty: 0,
+            adjust_in_qty: 0,
+            adjust_out_qty: 0,
             so_luong: 0,
             tong_net: 0,
           });
         }
 
         const item = stockMap.get(lotKey);
-        if (row.type === 'IN') {
-          item.in_qty += Number(row.so_luong || 0);
+        const qty = Number(row.so_luong || 0);
+
+        if (t === 'IN' || t === 'NHẬP') {
+          item.in_qty += qty;
           item.product_name = row.product_name || item.product_name;
           item.customer_name = row.customer_name || item.customer_name;
           item.position_name = row.position_name || item.position_name;
@@ -246,14 +253,20 @@ export default function App() {
           item.net = Number(row.net || item.net || 0);
           item.date = row.date || item.date;
           item.note = row.note || item.note;
-        } else if (row.type === 'OUT') {
-          item.out_qty += Number(row.so_luong || 0);
+        } else if (t === 'OUT' || t === 'XUẤT') {
+          item.out_qty += qty;
+        } else if (t === 'ADJUST_IN') {
+          item.adjust_in_qty += qty;
+          item.product_name = row.product_name || item.product_name;
+        } else if (t === 'ADJUST_OUT') {
+          item.adjust_out_qty += qty;
         }
       });
 
       const listStock = [];
       stockMap.forEach((val) => {
-        const tonQty = val.in_qty - val.out_qty;
+        // TỒN KHO = (NHẬP + ADJUST_IN) - (XUẤT + ADJUST_OUT)
+        const tonQty = (val.in_qty + val.adjust_in_qty) - (val.out_qty + val.adjust_out_qty);
         if (tonQty > 0) {
           listStock.push({
             ...val,
@@ -275,11 +288,16 @@ export default function App() {
       });
     }
 
-    // 2. TRƯỜNG HỢP GIAO DỊCH LỊCH SỬ (ALL, IN, OUT)
+    // 2. TRƯỜNG HỢP GIAO DỊCH LỊCH SỬ (ALL, IN, OUT, ADJUST_IN, ADJUST_OUT)
     return transactions.filter((item) => {
-      const matchType = filterType === 'ALL' || item.type === filterType;
-      const matchDate = checkDateInRange(item.date);
+      const t = (item.type || '').toUpperCase();
+      let matchType = false;
+      if (filterType === 'ALL') matchType = true;
+      else if (filterType === 'IN') matchType = (t === 'IN' || t === 'NHẬP');
+      else if (filterType === 'OUT') matchType = (t === 'OUT' || t === 'XUẤT');
+      else matchType = (t === filterType);
 
+      const matchDate = checkDateInRange(item.date);
       const matchProduct = !searchProduct || item.product_name === searchProduct;
       const matchCustomer = !searchCustomer || item.customer_name === searchCustomer;
       const matchReceiver = !searchReceiver || item.receiver_name === searchReceiver;
@@ -300,33 +318,38 @@ export default function App() {
     searchVehicle, 
     searchTicket
   ]);
-//
-// Tính toán tổng số lượng, tổng tiền của kết quả sau khi lọc
-const summaryStats = useMemo(() => {
-  let totalQty = 0;
-  let totalPrice = 0;
 
-  filteredTransactions.forEach((item) => {
-    const qty = Number(item.so_luong) || 0;
-    const price = Number(item.price) || 0;
-    totalQty += qty;
-    totalPrice += qty * price;
-  });
+  // =========================================================================
+  // TÍNH TOÁN TỔNG SỐ LƯỢNG & TỔNG TIỀN
+  // =========================================================================
+  const summaryStats = useMemo(() => {
+    let totalQty = 0;
+    let totalPrice = 0;
 
-  return {
-    totalRows: filteredTransactions.length,
-    totalQty,
-    totalPrice,
-  };
-}, [filteredTransactions]);
-//columns table
+    filteredTransactions.forEach((item) => {
+      const qty = Number(item.so_luong) || 0;
+      const price = Number(item.price) || 0;
+      totalQty += qty;
+      totalPrice += qty * price;
+    });
+
+    return {
+      totalRows: filteredTransactions.length,
+      totalQty,
+      totalPrice,
+    };
+  }, [filteredTransactions]);
+
+  // =========================================================================
+  // CẤU HÌNH CÁC CỘT TABLE
+  // =========================================================================
   const columns = [
     { 
       title: 'TT', 
-     key: 'stt', 
-     width: 65, 
-     align: 'center',
-     render: (_text, _record, index) => <b>{index + 1}</b>
+      key: 'stt', 
+      width: 65, 
+      align: 'center',
+      render: (_text, _record, index) => <b>{index + 1}</b>
     },
     { title: 'Ngày', dataIndex: 'date', key: 'date', width: 110, align: 'center', render: (d) => <b>{d}</b> },
     { title: 'Số Phiếu', dataIndex: 'so_phieu', key: 'so_phieu', width: 110 },
@@ -337,9 +360,22 @@ const summaryStats = useMemo(() => {
       width: 100,
       align: 'center',
       render: (type) => {
-        if (type === 'IN') return <Tag color="green">NHẬP</Tag>;
-        if (type === 'OUT') return <Tag color="blue">XUẤT</Tag>;
-        if (type === 'STOCK') return <Tag color="orange" style={{ fontWeight: 'bold' }}>TỒN KHO</Tag>;
+        const t = (type || '').toUpperCase();
+        if (t === 'NHẬP' || t === 'IN') {
+          return <Tag color="green">NHẬP</Tag>;
+        }
+        if (t === 'XUẤT' || t === 'OUT') {
+          return <Tag color="blue">XUẤT</Tag>;
+        }
+        if (t === 'ADJUST_IN') {
+          return <Tag color="cyan">Đ/C TĂNG</Tag>;
+        }
+        if (t === 'ADJUST_OUT') {
+          return <Tag color="volcano">Đ/C GIẢM</Tag>;
+        }
+        if (t === 'STOCK') {
+          return <Tag color="gold">TỒN KHO</Tag>;
+        }
         return <Tag>{type}</Tag>;
       }
     },
@@ -354,7 +390,7 @@ const summaryStats = useMemo(() => {
       align: 'right', 
       width: 130,
       render: (sl, r) => (
-        <span style={{ color: r.type === 'STOCK' ? '#d46b08' : 'inherit' }}>
+        <span style={{ color: r.type === 'STOCK' ? '#d46b08' : 'inherit', whiteSpace: 'nowrap' }}>
           <b>{sl?.toLocaleString()}</b> {r.dvt ? `(${r.dvt})` : ''}
         </span>
       ) 
@@ -364,14 +400,14 @@ const summaryStats = useMemo(() => {
       dataIndex: 'price', 
       align: 'right', 
       width: 110,
-      render: (p) => (p ? `${p.toLocaleString()} đ` : '-') 
+      render: (p) => <span style={{ whiteSpace: 'nowrap' }}>{p ? `${p.toLocaleString()} đ` : '-'}</span> 
     },
     {
       title: 'Ghi Chú', 
       dataIndex: 'note', 
       key: 'note',
       ellipsis: {
-        showTitle: false, // Tắt title mặc định của trình duyệt
+        showTitle: false,
       },
       render: (note) => (
         <Tooltip placement="topLeft" title={note || ''}>
@@ -479,11 +515,13 @@ const summaryStats = useMemo(() => {
                         setFilterType(val);
                         setSearchTicket(null);
                       }} 
-                      style={{ width: 160, fontWeight: 'bold' }} 
+                      style={{ width: 170, fontWeight: 'bold' }} 
                       options={[
                         { label: 'Tất cả GD', value: 'ALL' },
                         { label: '📥 Nhập kho', value: 'IN' },
                         { label: '📤 Xuất kho', value: 'OUT' },
+                        { label: '➕ Đ/C Tăng', value: 'ADJUST_IN' },
+                        { label: '➖ Đ/C Giảm', value: 'ADJUST_OUT' },
                         { label: '📦 Tồn kho (> 0)', value: 'STOCK' }
                       ]} 
                     />
@@ -506,9 +544,6 @@ const summaryStats = useMemo(() => {
                     Xóa tất cả lọc / Làm mới
                   </Button>
                 </Flex>
-
-                
-
 
                 {/* BỘ LỌC DROPDOWN DISTINCT TỪ SUPABASE */}
                 <Card size="small" style={{ background: '#ffffff', borderRadius: '6px' }}>
@@ -570,7 +605,7 @@ const summaryStats = useMemo(() => {
                       />
                     </Col>
 
-                    {(filterType === 'OUT' || filterType === 'ALL') && (
+                    {(filterType === 'OUT' || filterType === 'ALL' || filterType === 'ADJUST_OUT') && (
                       <Col xs={24} sm={12} md={6}>
                         <Select 
                           showSearch
@@ -610,89 +645,59 @@ const summaryStats = useMemo(() => {
                   </Row>
                 </Card>
 
-
-
-                {/* CẬP NHẬT THẺ TABLE DƯỚI ĐÂY */}
+                {/* BẢNG GIAO DỊCH */}
                 <Table 
                   rowKey="id" 
                   dataSource={filteredTransactions} 
                   columns={columns} 
                   loading={loading}
                   scroll={{ x: 1000 }}
-                  
                   pagination={{ 
                     defaultPageSize: 50,
                     pageSizeOptions: ['10', '20', '50', '100'],
                     showSizeChanger: true,
                     showTotal: (total, range) => `${range[0]}-${range[1]} / Tổng ${total} dòng`
                   }}
-                  
                   style={{ borderRadius: '8px', overflow: 'hidden' }}
-                //  summary={() => (
-                //     <Table.Summary fixed>
-                //       <Table.Summary.Row style={{ background: '#fafafa', fontWeight: 'bold' }}>
-                //         {/* 1. Gộp các cột bên trái */}
-                //         <Table.Summary.Cell index={0} colSpan={6} style={{ textAlign: 'right', paddingRight: '15px' }}>
-                //           TỔNG CỘNG ({summaryStats.totalRows} dòng):
-                //         </Table.Summary.Cell>
-
-                //         {/* 2. Cột Số Lượng */}
-                //         <Table.Summary.Cell index={6} align="right" style={{ color: '#d4380d', fontSize: '15px', whiteSpace: 'nowrap' }}>
-                //           {summaryStats.totalQty.toLocaleString()}
-                //         </Table.Summary.Cell>
-
-                //         {/* 3. Cột Thành Tiền - thêm whiteSpace: 'nowrap' và fontSize vừa vặn */}
-                //         <Table.Summary.Cell index={7} align="right" style={{ color: '#d4380d', fontSize: '14px', whiteSpace: 'nowrap' }}>
-                //           {summaryStats.totalPrice > 0 ? `${summaryStats.totalPrice.toLocaleString()} đ` : '-'}
-                //         </Table.Summary.Cell>
-
-                //         {/* 4. Cột Ghi chú */}
-                //         <Table.Summary.Cell index={8} />
-                //       </Table.Summary.Row>
-                //     </Table.Summary>
-                //   )}  
-
-                  
                 />
-
-    
 
               </Flex>
             </Card>
-                      {/* KHỐI THỐNG KÊ TRỰC QUAN SAU KHI LỌC */}
-                <Card 
-                  size="small" 
-                  style={{ 
-                    background: '#f6ffed', 
-                    border: '1px solid #b7eb8f', 
-                    borderRadius: '6px' 
-                  }}
-                  >
-                  <Flex justify="space-around" align="center" wrap="wrap" gap="small">
-                    <div>
-                      <span style={{ color: '#595959' }}>📋 Tổng số dòng: </span>
-                      <b style={{ fontSize: '16px', color: '#1890ff' }}>
-                        {summaryStats.totalRows.toLocaleString()}
-                      </b>
-                    </div>
 
-                    <div>
-                      <span style={{ color: '#595959' }}>📦 Tổng số lượng: </span>
-                      <b style={{ fontSize: '18px', color: '#52c41a' }}>
-                        {summaryStats.totalQty.toLocaleString()}
-                      </b>
-                    </div>
+            {/* KHỐI THỐNG KÊ TRỰC QUAN SAU KHI LỌC */}
+            <Card 
+              size="small" 
+              style={{ 
+                background: '#f6ffed', 
+                border: '1px solid #b7eb8f', 
+                borderRadius: '6px' 
+              }}
+            >
+              <Flex justify="space-around" align="center" wrap="wrap" gap="small">
+                <div>
+                  <span style={{ color: '#595959' }}>📋 Tổng số dòng: </span>
+                  <b style={{ fontSize: '16px', color: '#1890ff' }}>
+                    {summaryStats.totalRows.toLocaleString()}
+                  </b>
+                </div>
 
-                    {summaryStats.totalPrice > 0 && (
-                      <div>
-                        <span style={{ color: '#595959' }}>💰 Tổng thành tiền: </span>
-                        <b style={{ fontSize: '18px', color: '#fa8c16' }}>
-                          {summaryStats.totalPrice.toLocaleString()} đ
-                        </b>
-                      </div>
-                    )}
-                  </Flex>
-                </Card> 
+                <div>
+                  <span style={{ color: '#595959' }}>📦 Tổng số lượng: </span>
+                  <b style={{ fontSize: '18px', color: '#52c41a' }}>
+                    {summaryStats.totalQty.toLocaleString()}
+                  </b>
+                </div>
+
+                {summaryStats.totalPrice > 0 && (
+                  <div>
+                    <span style={{ color: '#595959' }}>💰 Tổng thành tiền: </span>
+                    <b style={{ fontSize: '18px', color: '#fa8c16' }}>
+                      {summaryStats.totalPrice.toLocaleString()} đ
+                    </b>
+                  </div>
+                )}
+              </Flex>
+            </Card> 
 
           </Flex>
         )}
