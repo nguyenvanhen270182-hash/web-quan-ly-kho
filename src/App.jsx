@@ -507,40 +507,7 @@ const summaryStats = useMemo(() => {
                   </Button>
                 </Flex>
 
-                {/* KHỐI THỐNG KÊ TRỰC QUAN SAU KHI LỌC */}
-                <Card 
-                  size="small" 
-                  style={{ 
-                    background: '#f6ffed', 
-                    border: '1px solid #b7eb8f', 
-                    borderRadius: '6px' 
-                  }}
-                >
-                  <Flex justify="space-around" align="center" wrap="wrap" gap="small">
-                    <div>
-                      <span style={{ color: '#595959' }}>📋 Tổng số dòng: </span>
-                      <b style={{ fontSize: '16px', color: '#1890ff' }}>
-                        {summaryStats.totalRows.toLocaleString()}
-                      </b>
-                    </div>
-
-                    <div>
-                      <span style={{ color: '#595959' }}>📦 Tổng số lượng: </span>
-                      <b style={{ fontSize: '18px', color: '#52c41a' }}>
-                        {summaryStats.totalQty.toLocaleString()}
-                      </b>
-                    </div>
-
-                    {summaryStats.totalPrice > 0 && (
-                      <div>
-                        <span style={{ color: '#595959' }}>💰 Tổng thành tiền: </span>
-                        <b style={{ fontSize: '18px', color: '#fa8c16' }}>
-                          {summaryStats.totalPrice.toLocaleString()} đ
-                        </b>
-                      </div>
-                    )}
-                  </Flex>
-                </Card>
+                
 
 
                 {/* BỘ LỌC DROPDOWN DISTINCT TỪ SUPABASE */}
@@ -652,34 +619,81 @@ const summaryStats = useMemo(() => {
                   columns={columns} 
                   loading={loading}
                   scroll={{ x: 1000 }}
+                  
                   pagination={{ 
                     defaultPageSize: 50,
                     pageSizeOptions: ['10', '20', '50', '100'],
                     showSizeChanger: true,
                     showTotal: (total, range) => `${range[0]}-${range[1]} / Tổng ${total} dòng`
                   }}
-                  // DÒNG TỔNG CỘNG Ở CHÂN BẢNG:
-                  summary={() => (
-                    <Table.Summary fixed>
-                      <Table.Summary.Row style={{ background: '#fafafa', fontWeight: 'bold' }}>
-                        <Table.Summary.Cell index={0} align="center">Tổng</Table.Summary.Cell>
-                        <Table.Summary.Cell index={1} colSpan={5} style={{ textAlign: 'right' }}>
-                          TỔNG CỘNG ({summaryStats.totalRows} dòng):
-                        </Table.Summary.Cell>
-                        <Table.Summary.Cell index={6} align="right" style={{ color: '#d4380d', fontSize: '15px' }}>
-                          {summaryStats.totalQty.toLocaleString()}
-                        </Table.Summary.Cell>
-                        <Table.Summary.Cell index={7} align="right" style={{ color: '#d4380d' }}>
-                          {summaryStats.totalPrice > 0 ? `${summaryStats.totalPrice.toLocaleString()} đ` : '-'}
-                        </Table.Summary.Cell>
-                        <Table.Summary.Cell index={8} />
-                      </Table.Summary.Row>
-                    </Table.Summary>
-                  )}
+                  
                   style={{ borderRadius: '8px', overflow: 'hidden' }}
+                //  summary={() => (
+                //     <Table.Summary fixed>
+                //       <Table.Summary.Row style={{ background: '#fafafa', fontWeight: 'bold' }}>
+                //         {/* 1. Gộp các cột bên trái */}
+                //         <Table.Summary.Cell index={0} colSpan={6} style={{ textAlign: 'right', paddingRight: '15px' }}>
+                //           TỔNG CỘNG ({summaryStats.totalRows} dòng):
+                //         </Table.Summary.Cell>
+
+                //         {/* 2. Cột Số Lượng */}
+                //         <Table.Summary.Cell index={6} align="right" style={{ color: '#d4380d', fontSize: '15px', whiteSpace: 'nowrap' }}>
+                //           {summaryStats.totalQty.toLocaleString()}
+                //         </Table.Summary.Cell>
+
+                //         {/* 3. Cột Thành Tiền - thêm whiteSpace: 'nowrap' và fontSize vừa vặn */}
+                //         <Table.Summary.Cell index={7} align="right" style={{ color: '#d4380d', fontSize: '14px', whiteSpace: 'nowrap' }}>
+                //           {summaryStats.totalPrice > 0 ? `${summaryStats.totalPrice.toLocaleString()} đ` : '-'}
+                //         </Table.Summary.Cell>
+
+                //         {/* 4. Cột Ghi chú */}
+                //         <Table.Summary.Cell index={8} />
+                //       </Table.Summary.Row>
+                //     </Table.Summary>
+                //   )}  
+
+                  
                 />
+
+    
+
               </Flex>
             </Card>
+                      {/* KHỐI THỐNG KÊ TRỰC QUAN SAU KHI LỌC */}
+                <Card 
+                  size="small" 
+                  style={{ 
+                    background: '#f6ffed', 
+                    border: '1px solid #b7eb8f', 
+                    borderRadius: '6px' 
+                  }}
+                  >
+                  <Flex justify="space-around" align="center" wrap="wrap" gap="small">
+                    <div>
+                      <span style={{ color: '#595959' }}>📋 Tổng số dòng: </span>
+                      <b style={{ fontSize: '16px', color: '#1890ff' }}>
+                        {summaryStats.totalRows.toLocaleString()}
+                      </b>
+                    </div>
+
+                    <div>
+                      <span style={{ color: '#595959' }}>📦 Tổng số lượng: </span>
+                      <b style={{ fontSize: '18px', color: '#52c41a' }}>
+                        {summaryStats.totalQty.toLocaleString()}
+                      </b>
+                    </div>
+
+                    {summaryStats.totalPrice > 0 && (
+                      <div>
+                        <span style={{ color: '#595959' }}>💰 Tổng thành tiền: </span>
+                        <b style={{ fontSize: '18px', color: '#fa8c16' }}>
+                          {summaryStats.totalPrice.toLocaleString()} đ
+                        </b>
+                      </div>
+                    )}
+                  </Flex>
+                </Card> 
+
           </Flex>
         )}
 
