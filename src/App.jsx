@@ -1,0 +1,627 @@
+import React, { useEffect, useState, useMemo } from 'react';
+import { 
+  Layout, Table, Select, Button, Card, Space, 
+  message, Tag, Flex, Typography, DatePicker, Row, Col 
+} from 'antd';
+import { 
+  ReloadOutlined, ArrowUpOutlined, 
+  ArrowDownOutlined, PrinterOutlined, 
+  FileExcelOutlined, LogoutOutlined 
+} from '@ant-design/icons';
+import dayjs from 'dayjs';
+import isBetween from 'dayjs/plugin/isBetween';
+import { supabase } from './supabaseClient';
+
+import ImportStock from './components/ImportStock';
+import ExportStock from './components/ExportStock';
+import { printReportHistory, exportExcelReportHistory } from './utils/exportWebUtils';
+import Auth from './components/Auth';
+import { Tooltip } from 'antd'; // Nhớ import Tooltip từ 'antd' nếu chưa có
+dayjs.extend(isBetween);
+
+const { Header, Content } = Layout;
+const { Title } = Typography;
+const { RangePicker } = DatePicker;
+
+export default function App() {
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [currentView, setCurrentView] = useState('HISTORY');
+  
+  // Quản lý phiên đăng nhập & kiểm duyệt tài khoản
+  const [sessionUser, setSessionUser] = useState(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  // Bộ lọc loại giao dịch & ngày tháng
+  const [filterType, setFilterType] = useState('ALL');
+  const [dateRange, setDateRange] = useState(null);
+
+  // Giá trị các bộ lọc đang chọn
+  const [searchProduct, setSearchProduct] = useState(null);
+  const [searchCustomer, setSearchCustomer] = useState(null);
+  const [searchReceiver, setSearchReceiver] = useState(null);
+  const [searchPosition, setSearchPosition] = useState(null);
+  const [searchVehicle, setSearchVehicle] = useState(null);
+  const [searchTicket, setSearchTicket] = useState(null);
+
+  // =========================================================================
+  // XÁC THỰC TÀI KHOẢN VÀ KIỂM TRA IS_PRO TỪ BẢNG PROFILES
+  // =========================================================================
+  useEffect(() => {
+    const checkUserSession = async () => {
+      setCheckingAuth(true);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (session?.user) {
+          // Kiểm tra xem user này đã được Admin bật is_pro = true chưa
+          const { data: profile, error } = await supabase
+            .from('profiles')
+            .select('is_pro')
+            .eq('id', session.user.id)
+            .single();
+
+          if (!error && profile?.is_pro === true) {
+            setSessionUser(session.user);
+            setSelectedUser(session.user.id);
+          } else {
+            // Chưa được duyệt -> hủy phiên
+            await supabase.auth.signOut();
+            setSessionUser(null);
+            setSelectedUser(null);
+          }
+        } else {
+          setSessionUser(null);
+          setSelectedUser(null);
+        }
+      } catch (err) {
+        console.error('Lỗi kiểm tra session:', err);
+        setSessionUser(null);
+      } finally {
+        setCheckingAuth(false);
+      }
+    };
+
+    checkUserSession();
+
+    // Lắng nghe thay đổi trạng thái đăng nhập
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('is_pro')
+          .eq('id', session.user.id)
+          .single();
+
+        if (profile?.is_pro === true) {
+          setSessionUser(session.user);
+          setSelectedUser(session.user.id);
+        } else {
+          await supabase.auth.signOut();
+          setSessionUser(null);
+          setSelectedUser(null);
+        }
+      } else {
+        setSessionUser(null);
+        setSelectedUser(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setSessionUser(null);
+    setSelectedUser(null);
+    message.info('Đã đăng xuất!');
+  };
+
+  // =========================================================================
+  // TẢI DỮ LIỆU GIAO DỊCH TỪ SUPABASE
+  // =========================================================================
+  const fetchData = async (userId = selectedUser) => {
+    if (!userId) return;
+    setLoading(true);
+    let query = supabase.from('stock_transaction').select('*').order('id', { ascending: false });
+    if (userId) query = query.eq('user_id', userId);
+
+    const { data, error } = await query;
+    if (error) message.error('Lỗi: ' + error.message);
+    else setTransactions(data || []);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    if (selectedUser) {
+      fetchData(selectedUser);
+    }
+  }, [selectedUser]);
+
+  // =========================================================================
+  // BÓC TÁCH DANH SÁCH DISTINCT TỪ SUPABASE ĐỂ ĐỔ VÀO DROPDOWN
+  // =========================================================================
+  const distinctOptions = useMemo(() => {
+    if (!transactions || transactions.length === 0) {
+      return { products: [], customers: [], receivers: [], positions: [], vehicles: [], tickets: [] };
+    }
+
+    const prodSet = new Set();
+    const cusSet = new Set();
+    const recSet = new Set();
+    const posSet = new Set();
+    const vehSet = new Set();
+    const tickSet = new Set();
+
+    transactions.forEach((r) => {
+      if (r.product_name) prodSet.add(r.product_name.trim());
+      if (r.customer_name) cusSet.add(r.customer_name.trim());
+      if (r.receiver_name) recSet.add(r.receiver_name.trim());
+      if (r.position_name) posSet.add(r.position_name.trim());
+      
+      // Lọc biển số xe từ note
+      if (r.note) {
+        const m = r.note.match(/\|Xe:\s*([^|]+)/);
+        const v = m ? m[1].trim() : '';
+        if (v && v !== 'null' && v !== 'nulll') vehSet.add(v);
+      }
+
+      // Lọc số phiếu theo filterType hiện tại
+      if (r.so_phieu) {
+        if (filterType === 'OUT' && r.type === 'OUT') tickSet.add(r.so_phieu.trim());
+        else if (filterType === 'IN' && r.type === 'IN') tickSet.add(r.so_phieu.trim());
+        else if (filterType === 'ALL' || filterType === 'STOCK') tickSet.add(r.so_phieu.trim());
+      }
+    });
+
+    const toOptions = (set) => Array.from(set).filter(Boolean).map((v) => ({ label: v, value: v }));
+
+    return {
+      products: toOptions(prodSet),
+      customers: toOptions(cusSet),
+      receivers: toOptions(recSet),
+      positions: toOptions(posSet),
+      vehicles: toOptions(vehSet),
+      tickets: toOptions(tickSet),
+    };
+  }, [transactions, filterType]);
+
+  // Xóa toàn bộ bộ lọc
+  const handleResetFilters = () => {
+    setDateRange(null);
+    setSearchProduct(null);
+    setSearchCustomer(null);
+    setSearchReceiver(null);
+    setSearchPosition(null);
+    setSearchVehicle(null);
+    setSearchTicket(null);
+    fetchData(selectedUser);
+  };
+
+  // =========================================================================
+  // LOGIC LỌC DỮ LIỆU TỔNG HỢP THEO TỪNG DROPDOWN
+  // =========================================================================
+  const filteredTransactions = useMemo(() => {
+    if (!transactions) return [];
+
+    const checkDateInRange = (itemDate) => {
+      if (!dateRange || !dateRange[0] || !dateRange[1]) return true;
+      if (!itemDate) return false;
+      const start = dateRange[0].startOf('day');
+      const end = dateRange[1].endOf('day');
+      const current = dayjs(itemDate);
+      return current.isBetween(start, end, null, '[]');
+    };
+
+    // 1. TRƯỜNG HỢP TỒN KHO (> 0)
+    if (filterType === 'STOCK') {
+      const stockMap = new Map();
+      transactions.forEach((row) => {
+        const lotKey = row.type === 'IN' 
+          ? (row.ref_uuid || row.stock_uuid || row.uuid) 
+          : row.stock_uuid;
+        if (!lotKey) return;
+
+        if (!stockMap.has(lotKey)) {
+          stockMap.set(lotKey, {
+            ...row,
+            key: lotKey,
+            id: `TON_${lotKey.slice(-6)}`,
+            type: 'STOCK',
+            in_qty: 0,
+            out_qty: 0,
+            so_luong: 0,
+            tong_net: 0,
+          });
+        }
+
+        const item = stockMap.get(lotKey);
+        if (row.type === 'IN') {
+          item.in_qty += Number(row.so_luong || 0);
+          item.product_name = row.product_name || item.product_name;
+          item.customer_name = row.customer_name || item.customer_name;
+          item.position_name = row.position_name || item.position_name;
+          item.dvt = row.dvt || item.dvt;
+          item.net = Number(row.net || item.net || 0);
+          item.date = row.date || item.date;
+          item.note = row.note || item.note;
+        } else if (row.type === 'OUT') {
+          item.out_qty += Number(row.so_luong || 0);
+        }
+      });
+
+      const listStock = [];
+      stockMap.forEach((val) => {
+        const tonQty = val.in_qty - val.out_qty;
+        if (tonQty > 0) {
+          listStock.push({
+            ...val,
+            so_luong: tonQty,
+            tong_net: Math.round(tonQty * (val.net || 0) * 100) / 100,
+          });
+        }
+      });
+
+      return listStock.filter((item) => {
+        const matchProduct = !searchProduct || item.product_name === searchProduct;
+        const matchCustomer = !searchCustomer || item.customer_name === searchCustomer;
+        const matchPosition = !searchPosition || item.position_name === searchPosition;
+        const matchVehicle = !searchVehicle || item.note?.includes(searchVehicle);
+        const matchTicket = !searchTicket || item.so_phieu === searchTicket;
+        const matchDate = checkDateInRange(item.date);
+
+        return matchProduct && matchCustomer && matchPosition && matchVehicle && matchTicket && matchDate;
+      });
+    }
+
+    // 2. TRƯỜNG HỢP GIAO DỊCH LỊCH SỬ (ALL, IN, OUT)
+    return transactions.filter((item) => {
+      const matchType = filterType === 'ALL' || item.type === filterType;
+      const matchDate = checkDateInRange(item.date);
+
+      const matchProduct = !searchProduct || item.product_name === searchProduct;
+      const matchCustomer = !searchCustomer || item.customer_name === searchCustomer;
+      const matchReceiver = !searchReceiver || item.receiver_name === searchReceiver;
+      const matchPosition = !searchPosition || item.position_name === searchPosition;
+      const matchVehicle = !searchVehicle || item.note?.includes(searchVehicle);
+      const matchTicket = !searchTicket || item.so_phieu === searchTicket;
+
+      return matchType && matchDate && matchProduct && matchCustomer && matchReceiver && matchPosition && matchVehicle && matchTicket;
+    });
+  }, [
+    transactions, 
+    filterType, 
+    dateRange, 
+    searchProduct, 
+    searchCustomer, 
+    searchReceiver, 
+    searchPosition, 
+    searchVehicle, 
+    searchTicket
+  ]);
+
+  const columns = [
+    { 
+      title: 'TT', 
+     key: 'stt', 
+     width: 65, 
+     align: 'center',
+     render: (_text, _record, index) => <b>{index + 1}</b>
+    },
+    { title: 'Ngày', dataIndex: 'date', key: 'date', width: 110, align: 'center', render: (d) => <b>{d}</b> },
+    { title: 'Số Phiếu', dataIndex: 'so_phieu', key: 'so_phieu', width: 110 },
+    {
+      title: 'Loại',
+      dataIndex: 'type',
+      key: 'type',
+      width: 100,
+      align: 'center',
+      render: (type) => {
+        if (type === 'IN') return <Tag color="green">NHẬP</Tag>;
+        if (type === 'OUT') return <Tag color="blue">XUẤT</Tag>;
+        if (type === 'STOCK') return <Tag color="orange" style={{ fontWeight: 'bold' }}>TỒN KHO</Tag>;
+        return <Tag>{type}</Tag>;
+      }
+    },
+    { title: 'Tên Sản Phẩm', dataIndex: 'product_name', key: 'product_name', render: (t) => <b>{t}</b> },
+    { 
+      title: 'Place / Đối tác', 
+      render: (_, r) => r.position_name || r.customer_name || r.receiver_name || r.pos || '-' 
+    },
+    { 
+      title: 'Số Lượng', 
+      dataIndex: 'so_luong', 
+      align: 'right', 
+      width: 130,
+      render: (sl, r) => (
+        <span style={{ color: r.type === 'STOCK' ? '#d46b08' : 'inherit' }}>
+          <b>{sl?.toLocaleString()}</b> {r.dvt ? `(${r.dvt})` : ''}
+        </span>
+      ) 
+    },
+    { 
+      title: 'Đơn Giá', 
+      dataIndex: 'price', 
+      align: 'right', 
+      width: 110,
+      render: (p) => (p ? `${p.toLocaleString()} đ` : '-') 
+    },
+    {
+      title: 'Ghi Chú', 
+      dataIndex: 'note', 
+      key: 'note',
+      ellipsis: {
+        showTitle: false, // Tắt title mặc định của trình duyệt
+      },
+      render: (note) => (
+        <Tooltip placement="topLeft" title={note || ''}>
+          <span style={{ cursor: 'pointer' }}>{note || '-'}</span>
+        </Tooltip>
+      ),
+    },
+  ];
+
+  // 1. Màn hình chờ kiểm tra phiên
+  if (checkingAuth) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: '#001529', color: '#fff' }}>
+        Đang tải thông tin đăng nhập...
+      </div>
+    );
+  }
+
+  // 2. Chuyển về màn hình Auth nếu chưa đăng nhập / chưa được duyệt
+  if (!sessionUser) {
+    return (
+      <Auth 
+        onLoginSuccess={(user) => {
+          setSessionUser(user);
+          setSelectedUser(user.id);
+        }} 
+      />
+    );
+  }
+
+  // 3. Giao diện chính sau khi đăng nhập thành công
+  return (
+    <Layout style={{ minHeight: '100vh', background: '#4b8ef3' }}>
+      <Header style={{ background: '#001529', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 24px' }}>
+        <span style={{ fontSize: '18px', fontWeight: 'bold' }}>QUẢN LÝ KHO</span>
+        
+        <Flex align="center" gap={12}>
+          <Tag color="blue" style={{ fontSize: 13, padding: '3px 8px' }}>
+            👤 {sessionUser?.email || 'Người dùng'}
+          </Tag>
+          <Button 
+            type="primary" 
+            danger 
+            size="small" 
+            icon={<LogoutOutlined />} 
+            onClick={handleLogout}
+          >
+            Đăng xuất
+          </Button>
+        </Flex>
+      </Header>
+
+      <Content style={{ padding: '16px 24px', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
+        {currentView === 'HISTORY' && (
+          <Flex vertical gap="middle" style={{ width: '100%' }}>
+            <Flex justify="space-between" align="center" wrap="wrap" gap="middle">
+              <Title level={4} style={{ margin: 0, color: '#fff' }}>
+                {filterType === 'STOCK' ? '📦 Danh Sách Tồn Kho Khả Dụng' : 'Lịch Sử Giao Dịch'}
+              </Title>
+              <Space wrap>
+                <Button 
+                  icon={<PrinterOutlined />} 
+                  onClick={() => printReportHistory({ filterType, dateRange, transactions, filteredData: filteredTransactions })}
+                  style={{ background: '#faad14', color: '#fff', fontWeight: 'bold' }}
+                >
+                  In / Xuất PDF Báo Cáo
+                </Button>
+                
+                <Button 
+                  icon={<FileExcelOutlined />} 
+                  onClick={() => exportExcelReportHistory({ filterType, filteredData: filteredTransactions })}
+                  style={{ background: '#13c2c2', color: '#fff', fontWeight: 'bold' }}
+                >
+                  Xuất Excel
+                </Button>
+
+                <Button 
+                  type="primary" 
+                  style={{ background: '#52c41a' }} 
+                  icon={<ArrowDownOutlined />} 
+                  onClick={() => setCurrentView('IMPORT')}
+                >
+                  Nhập Kho
+                </Button>
+                <Button 
+                  type="primary" 
+                  danger 
+                  icon={<ArrowUpOutlined />} 
+                  onClick={() => setCurrentView('EXPORT')}
+                >
+                  Xuất Kho
+                </Button>
+              </Space>
+            </Flex>
+
+            <Card variant="borderless" style={{ background: '#9e2782', borderRadius: '8px', width: '100%' }}>
+              <Flex vertical gap="middle">
+                
+                {/* THANH ĐIỀU HƯỚNG LOẠI GIAO DỊCH & KHOẢNG NGÀY */}
+                <Flex justify="space-between" wrap="wrap" gap="small" align="center">
+                  <Space wrap>
+                    <Select 
+                      value={filterType} 
+                      onChange={(val) => {
+                        setFilterType(val);
+                        setSearchTicket(null);
+                      }} 
+                      style={{ width: 160, fontWeight: 'bold' }} 
+                      options={[
+                        { label: 'Tất cả GD', value: 'ALL' },
+                        { label: '📥 Nhập kho', value: 'IN' },
+                        { label: '📤 Xuất kho', value: 'OUT' },
+                        { label: '📦 Tồn kho (> 0)', value: 'STOCK' }
+                      ]} 
+                    />
+
+                    <RangePicker 
+                      value={dateRange} 
+                      onChange={setDateRange} 
+                      format="YYYY-MM-DD"
+                      placeholder={['Từ ngày', 'Đến ngày']}
+                      style={{ width: 240 }} 
+                      allowClear 
+                    />
+                  </Space>
+
+                  <Button 
+                    icon={<ReloadOutlined />} 
+                    onClick={handleResetFilters} 
+                    loading={loading}
+                  >
+                    Xóa tất cả lọc / Làm mới
+                  </Button>
+                </Flex>
+
+                {/* BỘ LỌC DROPDOWN DISTINCT TỪ SUPABASE */}
+                <Card size="small" style={{ background: '#ffffff', borderRadius: '6px' }}>
+                  <Row gutter={[10, 10]}>
+                    <Col xs={24} sm={12} md={6}>
+                      <Select 
+                        showSearch
+                        allowClear
+                        placeholder="🔍 Chọn Sản Phẩm..." 
+                        style={{ width: '100%' }}
+                        value={searchProduct}
+                        onChange={setSearchProduct}
+                        options={distinctOptions.products}
+                        filterOption={(input, option) =>
+                          (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                        }
+                      />
+                    </Col>
+                    <Col xs={24} sm={12} md={6}>
+                      <Select 
+                        showSearch
+                        allowClear
+                        placeholder="🏢 Chọn Khách hàng / NCC..." 
+                        style={{ width: '100%' }}
+                        value={searchCustomer}
+                        onChange={setSearchCustomer}
+                        options={distinctOptions.customers}
+                        filterOption={(input, option) =>
+                          (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                        }
+                      />
+                    </Col>
+                    <Col xs={24} sm={12} md={6}>
+                      <Select 
+                        showSearch
+                        allowClear
+                        placeholder="📍 Chọn Vị trí kho..." 
+                        style={{ width: '100%' }}
+                        value={searchPosition}
+                        onChange={setSearchPosition}
+                        options={distinctOptions.positions}
+                        filterOption={(input, option) =>
+                          (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                        }
+                      />
+                    </Col>
+                    <Col xs={24} sm={12} md={6}>
+                      <Select 
+                        showSearch
+                        allowClear
+                        placeholder="🚚 Chọn Biển số xe..." 
+                        style={{ width: '100%' }}
+                        value={searchVehicle}
+                        onChange={setSearchVehicle}
+                        options={distinctOptions.vehicles}
+                        filterOption={(input, option) =>
+                          (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                        }
+                      />
+                    </Col>
+
+                    {(filterType === 'OUT' || filterType === 'ALL') && (
+                      <Col xs={24} sm={12} md={6}>
+                        <Select 
+                          showSearch
+                          allowClear
+                          placeholder="👤 Chọn Người nhận..." 
+                          style={{ width: '100%' }}
+                          value={searchReceiver}
+                          onChange={setSearchReceiver}
+                          options={distinctOptions.receivers}
+                          filterOption={(input, option) =>
+                            (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                          }
+                        />
+                      </Col>
+                    )}
+
+                    <Col xs={24} sm={12} md={6}>
+                      <Select 
+                        showSearch
+                        allowClear
+                        placeholder={
+                          filterType === 'OUT' 
+                            ? '📄 Chọn Số phiếu xuất...' 
+                            : filterType === 'IN' 
+                            ? '📄 Chọn Số phiếu nhập...' 
+                            : '📄 Chọn Số phiếu...'
+                        } 
+                        style={{ width: '100%' }}
+                        value={searchTicket}
+                        onChange={setSearchTicket}
+                        options={distinctOptions.tickets}
+                        filterOption={(input, option) =>
+                          (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                        }
+                      />
+                    </Col>
+                  </Row>
+                </Card>
+
+                {/* CẬP NHẬT THẺ TABLE DƯỚI ĐÂY */}
+                <Table 
+                  rowKey="id" 
+                  dataSource={filteredTransactions} 
+                  columns={columns} 
+                  loading={loading}
+                  scroll={{ x: 1100 }} // Cho phép cuộn mượt mà nếu màn hình nhỏ
+                  pagination={{ 
+                    defaultPageSize: 10,
+                    pageSizeOptions: ['10', '20', '50', '100'],
+                    showSizeChanger: true,
+                    showTotal: (total, range) => `${range[0]}-${range[1]} / Tổng ${total} dòng`
+                  }}
+                  style={{ borderRadius: '8px', overflow: 'hidden' }}
+                />
+              </Flex>
+            </Card>
+          </Flex>
+        )}
+
+        {currentView === 'IMPORT' && (
+          <ImportStock 
+            selectedUser={selectedUser} 
+            onBack={() => { setCurrentView('HISTORY'); fetchData(selectedUser); }} 
+          />
+        )}
+
+        {currentView === 'EXPORT' && (
+          <ExportStock 
+            selectedUser={selectedUser} 
+            onBack={() => { setCurrentView('HISTORY'); fetchData(selectedUser); }} 
+          />
+        )}
+      </Content>
+    </Layout>
+  );
+}

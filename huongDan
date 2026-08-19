@@ -1,0 +1,99 @@
+src/
+├── components/
+│   ├── ImportStock.jsx    (Màn hình Nhập kho)
+│   └── ExportStock.jsx    (Màn hình Xuất kho)
+├── supabaseClient.js
+├── App.jsx                (Màn hình chính / Điều hướng)
+└── main.jsx
+1. Cài đặt các thư viện cần thiết (nếu chưa cài)
+
+Mở Terminal tại thư mục gốc của dự án và chạy lệnh:
+
+Bash
+npm install antd @ant-design/icons @supabase/supabase-js
+2. Khởi chạy Development Server
+
+Tùy vào công cụ bạn dùng lúc tạo dự án, gõ một trong hai lệnh sau:
+
+Nếu dùng Vite (phổ biến nhất hiện nay):
+
+Bash
+npm run dev
+Nếu dùng Create React App:
+
+Bash
+npm start
+3. Mở trên trình duyệt
+
+Sau khi chạy lệnh, Terminal sẽ xuất hiện một đường link cục bộ. Bạn chỉ cần click chuột hoặc mở trình duyệt gõ:
+
+http://localhost:5173/ (đối với Vite)
+
+hoặc http://localhost:3000/ (đối với Create React App)
+
+Lưu ý nhỏ: Đảm bảo file supabaseClient.js trong thư mục src/ đã được điền đúng Supabase URL và Anon Key của bạn để tránh lỗi kết nối dữ liệu khi tải trang.
+
+Nếu trước đó bảng trên Supabase đang Enable RLS (và Android chạy bình thường có gắn kèm Bearer Token), thì khi bạn chuyển sang Disable RLS, phía Android hoàn toàn không bị ảnh hưởng hay lỗi gì cả.
+
+Cơ chế hoạt động cụ thể:
+
+Với Android: Mặc dù code Android của bạn vẫn gửi kèm Token trong Header, nhưng khi RLS đã bị Disable, Database Supabase sẽ đơn giản là bỏ qua bước kiểm tra Policy và cho phép truy vấn trực tiếp ngay lập tức. Dữ liệu từ App Android vẫn thêm, sửa, đọc mượt mà.
+
+Với Web (React): Web của bạn lúc này không cần phải viết thêm màn hình Login hay giải mã Token phức tạp mà vẫn gọi insert(), select() trực tiếp thông qua anon key và lọc thủ công bằng .eq('user_id', selectedUser).
+
+Giải pháp lâu dài nếu muốn vừa an toàn vừa tiện cho cả 2 bên:
+
+Giai đoạn phát triển / Trải nghiệm hiện tại: Giữ RLS Disabled để thoải mái dựng xong giao diện Web, kiểm tra đồng bộ logic Nhập - Xuất - Tồn với Android.
+
+Khi đưa vào sử dụng thực tế (Production):
+
+Bạn chỉ cần thêm một form Đăng nhập ngắn gọn trên Web bằng hàm supabase.auth.signInWithPassword(...).
+
+Bật lại RLS Enable và tạo một Policy duy nhất cho cả Android và Web:
+
+SQL
+create policy "User chi thao tac voi du lieu cua minh"
+on stock_transaction for all
+using (auth.uid() = user_id);
+Khi đó cả Web và Android đều dùng chung cơ chế bảo mật tự động bằng Token 
+của Supabase.
+//thư viện pde và excel
+npm install jspdf jspdf-autotable xlsx file-saver
+
+ĐĂNG KÝ TÀI KHOẢN ???????????????
+Quy trình đăng ký bây giờ đã hoàn toàn tự động và bảo mật theo các bước sau:1. Luồng hoạt động phía người dùng:Khi người dùng nhập Email & Mật khẩu rồi bấm Gửi yêu cầu đăng ký, Supabase sẽ tạo tài khoản trong auth.users.Ngay lập tức, Trigger (on_auth_user_created) trong database tự động chạy và thêm 1 dòng mới vào bảng profiles với giá trị mặc định:JSON{
+  "id": "uuid_cua_user",
+  "email": "user_moi@gmail.com",
+  "is_pro": false
+}
+Sau khi đăng ký, web chuyển họ về tab Đăng nhập. Nếu họ cố đăng nhập ngay,
+ hệ thống kiểm tra thấy is_pro === false sẽ lập tức đăng xuất và hiện thông báo:
+ ⏳ Tài khoản của bạn đang chờ Admin phê duyệt trước khi có thể sử dụng!2. 
+ Thao tác của bạn (Admin):Bạn mở Supabase $\rightarrow$ vào 
+ Table Editor $\rightarrow$ chọn bảng profiles.
+ Nhìn thấy dòng email người mới vừa tạo đang ở trạng thái FALSE.
+ Bạn chỉ cần click đúp vào ô FALSE $\rightarrow$ đổi thành TRUE $\rightarrow$
+ bấm Save.Người đó có thể đăng nhập bình thường và vào hệ thống làm việc.
+
+
+ // đẩy lên githup
+ https://github.com/nguyenvanhen270182-hash/web-quan-ly-kho.git
+
+ # 1. Khởi tạo git (nếu chưa có)
+git init
+
+# 2. Gom toàn bộ file mã nguồn lại
+git add .
+
+# 3. Tạo bản lưu commit
+git commit -m "Hoan thien web quan ly kho va xac thuc auth"
+
+# 4. Đặt nhánh chính là main
+git branch -M main
+
+# 5. Dán link GitHub bạn vừa copy ở Bước 1 vào đây
+git remote add origin  https://github.com/nguyenvanhen270182-hash/web-quan-ly-kho.git
+
+# 6. Đẩy toàn bộ code lên GitHub
+git push -u origin main
+
