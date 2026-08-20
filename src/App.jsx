@@ -214,84 +214,84 @@ export default function App() {
       return current.isBetween(start, end, null, '[]');
     };
 
-    // 1. TRƯỜNG HỢP TỒN KHO (> 0)
-    if (filterType === 'STOCK') {
-      const stockMap = new Map();
-      transactions.forEach((row) => {
-        const t = (row.type || '').toUpperCase();
-        // Nhận diện theo mã lô (hoặc fallback về tên sản phẩm nếu không có UUID)
-        const lotKey = (t === 'IN' || t === 'NHẬP' || t === 'ADJUST_IN') 
-          ? (row.ref_uuid || row.stock_uuid || row.uuid || row.product_name) 
-          : (row.stock_uuid || row.ref_uuid || row.uuid || row.product_name);
-        
-        if (!lotKey) return;
+    // =========================================================================
+// 1. TRƯỜNG HỢP TỒN KHO (> 0)
+// =========================================================================
+if (filterType === 'STOCK') {
+  const stockMap = new Map();
 
-        if (!stockMap.has(lotKey)) {
-          stockMap.set(lotKey, {
-            ...row,
-            key: lotKey,
-            id: `TON_${String(lotKey).slice(-6)}`,
-            type: 'STOCK',
-            in_qty: 0,
-            out_qty: 0,
-            adjust_in_qty: 0,
-            adjust_out_qty: 0,
-            so_luong: 0,
-            tong_net: 0,
-          });
-        }
+  transactions.forEach((row) => {
+    const t = (row.type || '').toUpperCase();
+    const prodName = (row.product_name || '').trim();
+    const posName = (row.position_name || row.pos || 'KHO_CHINH').trim();
 
-        const item = stockMap.get(lotKey);
-        const qty = Number(row.so_luong || 0);
+    if (!prodName) return;
 
-        if (t === 'IN' || t === 'NHẬP') {
-          item.in_qty += qty;
-          item.product_name = row.product_name || item.product_name;
-          item.customer_name = row.customer_name || item.customer_name;
-          item.position_name = row.position_name || item.position_name;
-          item.dvt = row.dvt || item.dvt;
-          item.net = Number(row.net || item.net || 0);
-          item.price = Number(row.price || item.price || 0);
-          item.date = row.date || item.date;
-          item.note = row.note || item.note;
-        } else if (t === 'ADJUST_IN') {
-          item.adjust_in_qty += qty;
-          item.product_name = row.product_name || item.product_name;
-          item.customer_name = row.customer_name || item.customer_name;
-          item.position_name = row.position_name || item.position_name;
-          item.dvt = row.dvt || item.dvt;
-          item.price = Number(row.price || item.price || 0);
-        } else if (t === 'OUT' || t === 'XUẤT') {
-          item.out_qty += qty;
-        } else if (t === 'ADJUST_OUT') {
-          item.adjust_out_qty += qty;
-        }
-      });
+    // 🔥 GOM THEO SẢN PHẨM & VỊ TRÍ KHO (Đảm bảo Xuất và Điều chỉnh trừ đúng vào sản phẩm)
+    // Nếu bạn quản lý theo Lô cụ thể có mã ref_uuid thì có thể dùng: `${prodName}_${row.ref_uuid || 'DEFAULT'}`
+    const key = `${prodName}_${posName}`;
 
-      const listStock = [];
-      stockMap.forEach((val) => {
-        // TỒN KHO = (NHẬP + ADJUST_IN) - (XUẤT + ADJUST_OUT)
-        const tonQty = (val.in_qty + val.adjust_in_qty) - (val.out_qty + val.adjust_out_qty);
-        if (tonQty > 0) {
-          listStock.push({
-            ...val,
-            so_luong: tonQty,
-            tong_net: Math.round(tonQty * (val.net || 0) * 100) / 100,
-          });
-        }
-      });
-
-      return listStock.filter((item) => {
-        const matchProduct = !searchProduct || item.product_name === searchProduct;
-        const matchCustomer = !searchCustomer || item.customer_name === searchCustomer;
-        const matchPosition = !searchPosition || item.position_name === searchPosition;
-        const matchVehicle = !searchVehicle || item.note?.includes(searchVehicle);
-        const matchTicket = !searchTicket || item.so_phieu === searchTicket;
-        const matchDate = checkDateInRange(item.date);
-
-        return matchProduct && matchCustomer && matchPosition && matchVehicle && matchTicket && matchDate;
+    if (!stockMap.has(key)) {
+      stockMap.set(key, {
+        ...row,
+        key: key,
+        id: `TON_${key}`,
+        type: 'STOCK',
+        in_qty: 0,
+        out_qty: 0,
+        adjust_in_qty: 0,
+        adjust_out_qty: 0,
+        so_luong: 0,
+        tong_net: 0,
       });
     }
+
+    const item = stockMap.get(key);
+    const qty = Number(row.so_luong || 0);
+
+    if (t === 'IN' || t === 'NHẬP') {
+      item.in_qty += qty;
+      item.product_name = row.product_name || item.product_name;
+      item.customer_name = row.customer_name || item.customer_name;
+      item.position_name = row.position_name || item.position_name;
+      item.dvt = row.dvt || item.dvt;
+      item.net = Number(row.net || item.net || 0);
+      item.price = Number(row.price || item.price || 0);
+    } else if (t === 'OUT' || t === 'XUẤT') {
+      item.out_qty += qty;
+    } else if (t === 'ADJUST_IN') {
+      item.adjust_in_qty += qty;
+      item.dvt = row.dvt || item.dvt;
+    } else if (t === 'ADJUST_OUT') {
+      item.adjust_out_qty += qty;
+    }
+  });
+
+  const listStock = [];
+  stockMap.forEach((val) => {
+    // 🔥 CÔNG THỨC CHUẨN: TỒN = (NHẬP + Đ/C TĂNG) - (XUẤT + Đ/C GIẢM)
+    const tonQty = (val.in_qty + val.adjust_in_qty) - (val.out_qty + val.adjust_out_qty);
+    
+    if (tonQty > 0) {
+      listStock.push({
+        ...val,
+        so_luong: tonQty,
+        tong_net: Math.round(tonQty * (val.net || 0) * 100) / 100,
+      });
+    }
+  });
+
+  return listStock.filter((item) => {
+    const matchProduct = !searchProduct || item.product_name === searchProduct;
+    const matchCustomer = !searchCustomer || item.customer_name === searchCustomer;
+    const matchPosition = !searchPosition || item.position_name === searchPosition;
+    const matchVehicle = !searchVehicle || item.note?.includes(searchVehicle);
+    const matchTicket = !searchTicket || item.so_phieu === searchTicket;
+    const matchDate = checkDateInRange(item.date);
+
+    return matchProduct && matchCustomer && matchPosition && matchVehicle && matchTicket && matchDate;
+  });
+}
 
     // 2. TRƯỜNG HỢP GIAO DỊCH LỊCH SỬ (ALL, IN, OUT, ADJUST_IN, ADJUST_OUT)
     return transactions.filter((item) => {
