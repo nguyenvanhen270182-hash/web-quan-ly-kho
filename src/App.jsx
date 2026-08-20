@@ -168,7 +168,7 @@ export default function App() {
       const t = (r.type || '').toUpperCase();
       if (r.so_phieu) {
         if (filterType === 'OUT' && (t === 'OUT' || t === 'XUẤT')) tickSet.add(r.so_phieu.trim());
-        else if (filterType === 'IN' && (t === 'IN' || t === 'NHẬP')) tickSet.add(r.so_phieu.trim());
+        else if (filterType === 'IN' && (t === 'IN' || t === 'NHẬP' || t === 'ADJUST_IN' || t === 'ADJUST_OUT')) tickSet.add(r.so_phieu.trim());
         else if (filterType === 'ADJUST_IN' && t === 'ADJUST_IN') tickSet.add(r.so_phieu.trim());
         else if (filterType === 'ADJUST_OUT' && t === 'ADJUST_OUT') tickSet.add(r.so_phieu.trim());
         else if (filterType === 'ALL' || filterType === 'STOCK') tickSet.add(r.so_phieu.trim());
@@ -200,7 +200,7 @@ export default function App() {
   };
 
   // =========================================================================
-  // LOGIC LỌC DỮ LIỆU TỔNG HỢP (TÍNH TỒN KHO BAO GỒM CẢ ADJUST_IN VÀ ADJUST_OUT)
+  // LOGIC LỌC DỮ LIỆU TỔNG HỢP (TỒN KHO & NHẬP GỒM CẢ ADJUST_IN, ADJUST_OUT)
   // =========================================================================
   const filteredTransactions = useMemo(() => {
     if (!transactions) return [];
@@ -220,9 +220,9 @@ export default function App() {
       transactions.forEach((row) => {
         const t = (row.type || '').toUpperCase();
         // Nhận diện theo mã lô (hoặc fallback về tên sản phẩm nếu không có UUID)
-        const lotKey = (t === 'IN' || t === 'NHẬP') 
+        const lotKey = (t === 'IN' || t === 'NHẬP' || t === 'ADJUST_IN') 
           ? (row.ref_uuid || row.stock_uuid || row.uuid || row.product_name) 
-          : (row.stock_uuid || row.ref_uuid || row.product_name);
+          : (row.stock_uuid || row.ref_uuid || row.uuid || row.product_name);
         
         if (!lotKey) return;
 
@@ -251,13 +251,18 @@ export default function App() {
           item.position_name = row.position_name || item.position_name;
           item.dvt = row.dvt || item.dvt;
           item.net = Number(row.net || item.net || 0);
+          item.price = Number(row.price || item.price || 0);
           item.date = row.date || item.date;
           item.note = row.note || item.note;
-        } else if (t === 'OUT' || t === 'XUẤT') {
-          item.out_qty += qty;
         } else if (t === 'ADJUST_IN') {
           item.adjust_in_qty += qty;
           item.product_name = row.product_name || item.product_name;
+          item.customer_name = row.customer_name || item.customer_name;
+          item.position_name = row.position_name || item.position_name;
+          item.dvt = row.dvt || item.dvt;
+          item.price = Number(row.price || item.price || 0);
+        } else if (t === 'OUT' || t === 'XUẤT') {
+          item.out_qty += qty;
         } else if (t === 'ADJUST_OUT') {
           item.adjust_out_qty += qty;
         }
@@ -292,10 +297,17 @@ export default function App() {
     return transactions.filter((item) => {
       const t = (item.type || '').toUpperCase();
       let matchType = false;
-      if (filterType === 'ALL') matchType = true;
-      else if (filterType === 'IN') matchType = (t === 'IN' || t === 'NHẬP');
-      else if (filterType === 'OUT') matchType = (t === 'OUT' || t === 'XUẤT');
-      else matchType = (t === filterType);
+      
+      if (filterType === 'ALL') {
+        matchType = true;
+      } else if (filterType === 'IN') {
+        // Gom toàn bộ Nhập kho, Điều chỉnh tăng và Điều chỉnh giảm
+        matchType = (t === 'IN' || t === 'NHẬP' || t === 'ADJUST_IN' || t === 'ADJUST_OUT');
+      } else if (filterType === 'OUT') {
+        matchType = (t === 'OUT' || t === 'XUẤT');
+      } else {
+        matchType = (t === filterType);
+      }
 
       const matchDate = checkDateInRange(item.date);
       const matchProduct = !searchProduct || item.product_name === searchProduct;
@@ -320,17 +332,24 @@ export default function App() {
   ]);
 
   // =========================================================================
-  // TÍNH TOÁN TỔNG SỐ LƯỢNG & TỔNG TIỀN
+  // TÍNH TOÁN TỔNG SỐ LƯỢNG & TỔNG TIỀN (TRỪ NẾU LÀ ADJUST_OUT)
   // =========================================================================
   const summaryStats = useMemo(() => {
     let totalQty = 0;
     let totalPrice = 0;
 
     filteredTransactions.forEach((item) => {
+      const t = (item.type || '').toUpperCase();
       const qty = Number(item.so_luong) || 0;
       const price = Number(item.price) || 0;
-      totalQty += qty;
-      totalPrice += qty * price;
+
+      if (t === 'ADJUST_OUT') {
+        totalQty -= qty;
+        totalPrice -= qty * price;
+      } else {
+        totalQty += qty;
+        totalPrice += qty * price;
+      }
     });
 
     return {
@@ -389,11 +408,19 @@ export default function App() {
       dataIndex: 'so_luong', 
       align: 'right', 
       width: 130,
-      render: (sl, r) => (
-        <span style={{ color: r.type === 'STOCK' ? '#d46b08' : 'inherit', whiteSpace: 'nowrap' }}>
-          <b>{sl?.toLocaleString()}</b> {r.dvt ? `(${r.dvt})` : ''}
-        </span>
-      ) 
+      render: (sl, r) => {
+        const t = (r.type || '').toUpperCase();
+        const isAdjustOut = t === 'ADJUST_OUT';
+        return (
+          <span style={{ 
+            color: r.type === 'STOCK' ? '#d46b08' : isAdjustOut ? '#cf1322' : 'inherit', 
+            whiteSpace: 'nowrap',
+            fontWeight: isAdjustOut ? 'bold' : 'normal'
+          }}>
+            <b>{isAdjustOut ? `-${sl?.toLocaleString()}` : sl?.toLocaleString()}</b> {r.dvt ? `(${r.dvt})` : ''}
+          </span>
+        );
+      } 
     },
     { 
       title: 'Đơn Giá', 
