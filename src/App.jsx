@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { 
   Layout, Table, Select, Button, Card, Space, 
-  message, Tag, Flex, Typography, DatePicker, Row, Col, Tooltip 
+  message, Tag, Flex, Typography, DatePicker, Row, Col, Tooltip,
+  Modal, Form, InputNumber, Input, Radio 
 } from 'antd';
 import { 
   ReloadOutlined, ArrowUpOutlined, 
@@ -44,6 +45,16 @@ export default function App() {
   const [searchPosition, setSearchPosition] = useState(null);
   const [searchVehicle, setSearchVehicle] = useState(null);
   const [searchTicket, setSearchTicket] = useState(null);
+
+  // State cho Modal Điều chỉnh kiểm kê Tồn kho
+  const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
+  const [selectedStockItem, setSelectedStockItem] = useState(null);
+  const [adjustLoading, setAdjustLoading] = useState(false);
+  const [form] = Form.useForm();
+
+  // Theo dõi giá trị form để hiển thị trực quan số lượng dự kiến
+  const watchAdjustType = Form.useWatch('adjust_type', form);
+  const watchQuantity = Form.useWatch('quantity', form);
 
   // =========================================================================
   // XÁC THỰC TÀI KHOẢN VÀ KIỂM TRA IS_PRO TỪ BẢNG PROFILES
@@ -165,13 +176,14 @@ export default function App() {
       }
 
       // Lọc số phiếu theo filterType
+// Lọc số phiếu theo filterType
       const t = (r.type || '').toUpperCase();
       if (r.so_phieu) {
         if (filterType === 'OUT' && (t === 'OUT' || t === 'XUẤT')) tickSet.add(r.so_phieu.trim());
-        else if (filterType === 'IN' && (t === 'IN' || t === 'NHẬP' || t === 'ADJUST_IN' || t === 'ADJUST_OUT')) tickSet.add(r.so_phieu.trim());
+        else if ((filterType === 'IN' || filterType === 'STOCK') && (t === 'IN' || t === 'NHẬP')) tickSet.add(r.so_phieu.trim());
         else if (filterType === 'ADJUST_IN' && t === 'ADJUST_IN') tickSet.add(r.so_phieu.trim());
         else if (filterType === 'ADJUST_OUT' && t === 'ADJUST_OUT') tickSet.add(r.so_phieu.trim());
-        else if (filterType === 'ALL' || filterType === 'STOCK') tickSet.add(r.so_phieu.trim());
+        else if (filterType === 'ALL') tickSet.add(r.so_phieu.trim());
       }
     });
 
@@ -200,6 +212,79 @@ export default function App() {
   };
 
   // =========================================================================
+  // XỬ LÝ MỞ & LƯU PHIẾU ĐIỀU CHỈNH KHO (ADJUST_IN / ADJUST_OUT)
+  // =========================================================================
+  const handleOpenAdjustModal = (record) => {
+    setSelectedStockItem(record);
+    form.setFieldsValue({
+      adjust_type: 'ADJUST_IN',
+      quantity: 1,
+      note: ''
+    });
+    setIsAdjustModalOpen(true);
+  };
+const handleSaveAdjustment = async (values) => {
+    if (!selectedStockItem || !sessionUser) return;
+    setAdjustLoading(true);
+
+    try {
+      const todayStr = dayjs().format('YYYY-MM-DD');
+      const timeStamp = Date.now();
+      const rawUuid = crypto.randomUUID ? crypto.randomUUID() : `${timeStamp}_${Math.random().toString(36).substring(2, 9)}`;
+
+      const isAdjustOut = values.adjust_type === 'ADJUST_OUT';
+      const finalType = isAdjustOut ? 'ADJUST_OUT' : 'ADJUST_IN';
+      
+      // Khởi tạo các mã định danh chuẩn theo format của hệ thống
+      const txUuid = `TX_${rawUuid}`;
+      const refUuid = `${isAdjustOut ? 'AJO' : 'AJI'}_${rawUuid}`;
+      const autoTicket = `${isAdjustOut ? 'AJO' : 'AJI'}_${dayjs().format('YYYYMMDD_HHmmss')}`;
+
+      // 🔥 Lấy mã lô gốc của phiếu nhập để gán vào stock_uuid
+      const originStockUuid = selectedStockItem.stock_uuid || selectedStockItem.uuid || selectedStockItem.ref_uuid || null;
+
+      const newRecord = {
+        uuid: txUuid,
+        ref_uuid: refUuid,
+        stock_uuid: originStockUuid,
+        user_id: sessionUser.id,
+        date: todayStr,
+        so_phieu: autoTicket,
+        ref_so_phieu: autoTicket,
+        type: finalType,
+        product_code: selectedStockItem.product_code || '',
+        product_name: selectedStockItem.product_name,
+        customer_code: selectedStockItem.customer_code || '',
+        customer_name: selectedStockItem.customer_name || '',
+        position_code: selectedStockItem.position_code || '',
+        position_name: selectedStockItem.position_name || selectedStockItem.pos || 'HOÀNG LIÊN',
+        lot_no: selectedStockItem.lot_no || null,
+        dvt: selectedStockItem.dvt || 'Thùng',
+        so_luong: Number(values.quantity),
+        net: Number(selectedStockItem.net || 0),
+        tong_net: Math.round(Number(values.quantity) * Number(selectedStockItem.net || 0) * 100) / 100,
+        price: Number(selectedStockItem.price || 0),
+        note: values.note ? values.note : 'Sửa giảm Số lượng!'
+      };
+
+      const { error } = await supabase.from('stock_transaction').insert([newRecord]);
+
+      if (error) {
+        message.error('Lỗi khi lưu phiếu điều chỉnh: ' + error.message);
+      } else {
+        message.success(
+          `Đã tạo phiếu ${isAdjustOut ? 'ĐIỀU CHỈNH GIẢM' : 'ĐIỀU CHỈNH TĂNG'} thành công!`
+        );
+        setIsAdjustModalOpen(false);
+        fetchData(selectedUser);
+      }
+    } catch (err) {
+      message.error('Có lỗi xảy ra: ' + err.message);
+    } finally {
+      setAdjustLoading(false);
+    }
+  };
+  // =========================================================================
   // LOGIC LỌC DỮ LIỆU TỔNG HỢP (TỒN KHO & NHẬP GỒM CẢ ADJUST_IN, ADJUST_OUT)
   // =========================================================================
   const filteredTransactions = useMemo(() => {
@@ -214,84 +299,83 @@ export default function App() {
       return current.isBetween(start, end, null, '[]');
     };
 
-    // =========================================================================
-// 1. TRƯỜNG HỢP TỒN KHO (> 0)
-// =========================================================================
-if (filterType === 'STOCK') {
-  const stockMap = new Map();
+    // 1. TRƯỜNG HỢP TỒN KHO (> 0)
+    if (filterType === 'STOCK') {
+      const stockMap = new Map();
 
-  transactions.forEach((row) => {
-    const t = (row.type || '').toUpperCase();
-    const prodName = (row.product_name || '').trim();
-    const posName = (row.position_name || row.pos || 'KHO_CHINH').trim();
+      transactions.forEach((row) => {
+        const t = (row.type || '').toUpperCase();
+        const prodName = (row.product_name || '').trim();
+        const posName = (row.position_name || row.pos || 'KHO_CHINH').trim();
 
-    if (!prodName) return;
+        if (!prodName) return;
 
-    // 🔥 GOM THEO SẢN PHẨM & VỊ TRÍ KHO (Đảm bảo Xuất và Điều chỉnh trừ đúng vào sản phẩm)
-    // Nếu bạn quản lý theo Lô cụ thể có mã ref_uuid thì có thể dùng: `${prodName}_${row.ref_uuid || 'DEFAULT'}`
-    const key = `${prodName}_${posName}`;
+        const key = `${prodName}_${posName}`;
 
-    if (!stockMap.has(key)) {
-      stockMap.set(key, {
-        ...row,
-        key: key,
-        id: `TON_${key}`,
-        type: 'STOCK',
-        in_qty: 0,
-        out_qty: 0,
-        adjust_in_qty: 0,
-        adjust_out_qty: 0,
-        so_luong: 0,
-        tong_net: 0,
+        if (!stockMap.has(key)) {
+          stockMap.set(key, {
+            ...row,
+            key: key,
+            id: `TON_${key}`,
+            type: 'STOCK',
+            in_qty: 0,
+            out_qty: 0,
+            adjust_in_qty: 0,
+            adjust_out_qty: 0,
+            so_luong: 0,
+            tong_net: 0,
+          });
+        }
+
+        const item = stockMap.get(key);
+        const qty = Number(row.so_luong || 0);
+
+        if (t === 'IN' || t === 'NHẬP') {
+          item.in_qty += qty;
+          item.product_name = row.product_name || item.product_name;
+          item.customer_name = row.customer_name || item.customer_name;
+          item.position_name = row.position_name || item.position_name;
+          item.dvt = row.dvt || item.dvt;
+
+          item.net = Number(row.net || item.net || 0);
+          item.price = Number(row.price || item.price || 0);
+    // 🔥 Gán số phiếu và ngày theo Phiếu Nhập gốc
+          item.so_phieu = row.so_phieu || item.so_phieu;
+          item.date = row.date || item.date;
+          item.note = row.note || item.note;
+        } else if (t === 'OUT' || t === 'XUẤT') {
+          item.out_qty += qty;
+        } else if (t === 'ADJUST_IN') {
+          item.adjust_in_qty += qty;
+          item.dvt = row.dvt || item.dvt;
+        } else if (t === 'ADJUST_OUT') {
+          item.adjust_out_qty += qty;
+        }
+      });
+
+      const listStock = [];
+      stockMap.forEach((val) => {
+        const tonQty = (val.in_qty + val.adjust_in_qty) - (val.out_qty + val.adjust_out_qty);
+        if (tonQty > 0) {
+          listStock.push({
+            ...val,
+            so_luong: tonQty,
+            tong_net: Math.round(tonQty * (val.net || 0) * 100) / 100,
+          });
+        }
+      });
+
+      return listStock.filter((item) => {
+        const matchProduct = !searchProduct || item.product_name === searchProduct;
+        const matchCustomer = !searchCustomer || item.customer_name === searchCustomer;
+        const matchPosition = !searchPosition || item.position_name === searchPosition;
+        const matchVehicle = !searchVehicle || item.note?.includes(searchVehicle);
+        const matchTicket = !searchTicket || item.so_phieu === searchTicket;
+        const matchDate = checkDateInRange(item.date);
+
+        return matchProduct && matchCustomer && matchPosition && matchVehicle && matchTicket && matchDate;
       });
     }
-
-    const item = stockMap.get(key);
-    const qty = Number(row.so_luong || 0);
-
-    if (t === 'IN' || t === 'NHẬP') {
-      item.in_qty += qty;
-      item.product_name = row.product_name || item.product_name;
-      item.customer_name = row.customer_name || item.customer_name;
-      item.position_name = row.position_name || item.position_name;
-      item.dvt = row.dvt || item.dvt;
-      item.net = Number(row.net || item.net || 0);
-      item.price = Number(row.price || item.price || 0);
-    } else if (t === 'OUT' || t === 'XUẤT') {
-      item.out_qty += qty;
-    } else if (t === 'ADJUST_IN') {
-      item.adjust_in_qty += qty;
-      item.dvt = row.dvt || item.dvt;
-    } else if (t === 'ADJUST_OUT') {
-      item.adjust_out_qty += qty;
-    }
-  });
-
-  const listStock = [];
-  stockMap.forEach((val) => {
-    // 🔥 CÔNG THỨC CHUẨN: TỒN = (NHẬP + Đ/C TĂNG) - (XUẤT + Đ/C GIẢM)
-    const tonQty = (val.in_qty + val.adjust_in_qty) - (val.out_qty + val.adjust_out_qty);
-    
-    if (tonQty > 0) {
-      listStock.push({
-        ...val,
-        so_luong: tonQty,
-        tong_net: Math.round(tonQty * (val.net || 0) * 100) / 100,
-      });
-    }
-  });
-
-  return listStock.filter((item) => {
-    const matchProduct = !searchProduct || item.product_name === searchProduct;
-    const matchCustomer = !searchCustomer || item.customer_name === searchCustomer;
-    const matchPosition = !searchPosition || item.position_name === searchPosition;
-    const matchVehicle = !searchVehicle || item.note?.includes(searchVehicle);
-    const matchTicket = !searchTicket || item.so_phieu === searchTicket;
-    const matchDate = checkDateInRange(item.date);
-
-    return matchProduct && matchCustomer && matchPosition && matchVehicle && matchTicket && matchDate;
-  });
-}
 
     // 2. TRƯỜNG HỢP GIAO DỊCH LỊCH SỬ (ALL, IN, OUT, ADJUST_IN, ADJUST_OUT)
     return transactions.filter((item) => {
@@ -301,7 +385,6 @@ if (filterType === 'STOCK') {
       if (filterType === 'ALL') {
         matchType = true;
       } else if (filterType === 'IN') {
-        // Gom toàn bộ Nhập kho, Điều chỉnh tăng và Điều chỉnh giảm
         matchType = (t === 'IN' || t === 'NHẬP' || t === 'ADJUST_IN' || t === 'ADJUST_OUT');
       } else if (filterType === 'OUT') {
         matchType = (t === 'OUT' || t === 'XUẤT');
@@ -380,21 +463,11 @@ if (filterType === 'STOCK') {
       align: 'center',
       render: (type) => {
         const t = (type || '').toUpperCase();
-        if (t === 'NHẬP' || t === 'IN') {
-          return <Tag color="green">NHẬP</Tag>;
-        }
-        if (t === 'XUẤT' || t === 'OUT') {
-          return <Tag color="blue">XUẤT</Tag>;
-        }
-        if (t === 'ADJUST_IN') {
-          return <Tag color="cyan">Đ/C TĂNG</Tag>;
-        }
-        if (t === 'ADJUST_OUT') {
-          return <Tag color="volcano">Đ/C GIẢM</Tag>;
-        }
-        if (t === 'STOCK') {
-          return <Tag color="gold">TỒN KHO</Tag>;
-        }
+        if (t === 'NHẬP' || t === 'IN') return <Tag color="green">NHẬP</Tag>;
+        if (t === 'XUẤT' || t === 'OUT') return <Tag color="blue">XUẤT</Tag>;
+        if (t === 'ADJUST_IN') return <Tag color="cyan">Đ/C TĂNG</Tag>;
+        if (t === 'ADJUST_OUT') return <Tag color="volcano">Đ/C GIẢM</Tag>;
+        if (t === 'STOCK') return <Tag color="gold">TỒN KHO</Tag>;
         return <Tag>{type}</Tag>;
       }
     },
@@ -429,19 +502,36 @@ if (filterType === 'STOCK') {
       width: 110,
       render: (p) => <span style={{ whiteSpace: 'nowrap' }}>{p ? `${p.toLocaleString()} đ` : '-'}</span> 
     },
-    {
+    { 
       title: 'Ghi Chú', 
       dataIndex: 'note', 
       key: 'note',
-      ellipsis: {
-        showTitle: false,
-      },
+      ellipsis: { showTitle: false },
       render: (note) => (
         <Tooltip placement="topLeft" title={note || ''}>
           <span style={{ cursor: 'pointer' }}>{note || '-'}</span>
         </Tooltip>
       ),
     },
+    ...(filterType === 'STOCK' ? [{
+      title: 'Thao Tác',
+      key: 'action',
+      width: 110,
+      align: 'center',
+      render: (_, record) => (
+        <Button 
+          type="primary" 
+          size="small" 
+          style={{ background: '#722ed1', borderColor: '#722ed1', fontWeight: 'bold' }}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleOpenAdjustModal(record);
+          }}
+        >
+          ✏️ Đ/C
+        </Button>
+      )
+    }] : [])
   ];
 
   // 1. Màn hình chờ kiểm tra phiên
@@ -464,6 +554,14 @@ if (filterType === 'STOCK') {
       />
     );
   }
+
+  // Tính toán tồn kho dự kiến khi Modal mở
+  const currentStockQty = Number(selectedStockItem?.so_luong || 0);
+  const adjustType = watchAdjustType || 'ADJUST_IN';
+  const adjustQty = Number(watchQuantity || 0);
+  const projectedStock = adjustType === 'ADJUST_IN' 
+    ? currentStockQty + adjustQty 
+    : Math.max(0, currentStockQty - adjustQty);
 
   // 3. Giao diện chính sau khi đăng nhập thành công
   return (
@@ -492,7 +590,7 @@ if (filterType === 'STOCK') {
           <Flex vertical gap="middle" style={{ width: '100%' }}>
             <Flex justify="space-between" align="center" wrap="wrap" gap="middle">
               <Title level={4} style={{ margin: 0, color: '#fff' }}>
-                {filterType === 'STOCK' ? '📦 Danh Sách Tồn Kho Khả Dụng' : 'Lịch Sử Giao Dịch'}
+                {filterType === 'STOCK' ? '📦 Danh Sách Tồn Kho Khả Dụng (Click đúp hoặc bấm ✏️ Đ/C để điều chỉnh)' : 'Lịch Sử Giao Dịch'}
               </Title>
               <Space wrap>
                 <Button 
@@ -679,6 +777,16 @@ if (filterType === 'STOCK') {
                   columns={columns} 
                   loading={loading}
                   scroll={{ x: 1000 }}
+                  onRow={(record) => ({
+                    onDoubleClick: () => {
+                      if (filterType === 'STOCK') {
+                        handleOpenAdjustModal(record);
+                      }
+                    },
+                    style: {
+                      cursor: filterType === 'STOCK' ? 'pointer' : 'default',
+                    },
+                  })}
                   pagination={{ 
                     defaultPageSize: 50,
                     pageSizeOptions: ['10', '20', '50', '100'],
@@ -742,6 +850,73 @@ if (filterType === 'STOCK') {
             onBack={() => { setCurrentView('HISTORY'); fetchData(selectedUser); }} 
           />
         )}
+
+        {/* MODAL ĐIỀU CHỈNH TĂNG / GIẢM TỒN KHO */}
+        <Modal
+          title={`⚖️ Điều Chỉnh Kiểm Kê: ${selectedStockItem?.product_name || ''}`}
+          open={isAdjustModalOpen}
+          onCancel={() => setIsAdjustModalOpen(false)}
+          onOk={() => form.submit()}
+          confirmLoading={adjustLoading}
+          okText="Lưu phiếu điều chỉnh"
+          cancelText="Hủy bỏ"
+        >
+          <div style={{ marginBottom: 16, background: '#f5f5f5', padding: 12, borderRadius: 6 }}>
+            <div>Vị trí kho: <b>{selectedStockItem?.position_name || selectedStockItem?.pos || 'Mặc định'}</b></div>
+            <div style={{ marginTop: 4 }}>
+              Tồn hiện tại: <b style={{ color: '#d46b08', fontSize: 15 }}>{currentStockQty.toLocaleString()} {selectedStockItem?.dvt}</b>
+            </div>
+            <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px dashed #d9d9d9' }}>
+              Tồn dự kiến sau điều chỉnh: {' '}
+              <b style={{ color: adjustType === 'ADJUST_IN' ? '#389e0d' : '#cf1322', fontSize: 16 }}>
+                {projectedStock.toLocaleString()} {selectedStockItem?.dvt}
+              </b>
+              {adjustType === 'ADJUST_OUT' && adjustQty > currentStockQty && (
+                <div style={{ color: '#ff4d4f', fontSize: 12, marginTop: 2 }}>
+                  ⚠️ Số lượng giảm lớn hơn số tồn hiện có trong kho!
+                </div>
+              )}
+            </div>
+          </div>
+
+          <Form form={form} layout="vertical" onFinish={handleSaveAdjustment}>
+            <Form.Item name="adjust_type" label="Loại điều chỉnh" rules={[{ required: true }]}>
+              <Radio.Group buttonStyle="solid">
+                <Radio.Button value="ADJUST_IN" style={{ color: '#389e0d' }}>➕ Điều chỉnh TĂNG</Radio.Button>
+                <Radio.Button value="ADJUST_OUT" style={{ color: '#cf1322' }}>➖ Điều chỉnh GIẢM</Radio.Button>
+              </Radio.Group>
+            </Form.Item>
+
+            <Form.Item 
+              name="quantity" 
+              label={adjustType === 'ADJUST_IN' ? 'Số lượng cần TĂNG THÊM (+)' : 'Số lượng cần GIẢM BỚT (-)'}
+              rules={[
+                { required: true, message: 'Vui lòng nhập số lượng!' },
+                { 
+                  validator: (_, value) => {
+                    if (value <= 0) return Promise.reject(new Error('Số lượng phải lớn hơn 0!'));
+                    if (adjustType === 'ADJUST_OUT' && value > currentStockQty) {
+                      return Promise.reject(new Error(`Số lượng giảm không được vượt quá số tồn (${currentStockQty})!`));
+                    }
+                    return Promise.resolve();
+                  }
+                }
+              ]}
+            >
+              <InputNumber 
+                min={1} 
+                max={adjustType === 'ADJUST_OUT' ? currentStockQty : undefined}
+                style={{ width: '100%' }} 
+                placeholder={adjustType === 'ADJUST_IN' ? 'Ví dụ: Tăng thêm 50...' : 'Ví dụ: Giảm bớt 20...'} 
+              />
+            </Form.Item>
+
+            <Form.Item name="note" label="Lý do / Ghi chú kiểm kê">
+              <Input.TextArea rows={2} placeholder="Ví dụ: Kiểm kê cuối tháng thừa/thiếu hàng..." />
+            </Form.Item>
+          </Form>
+        </Modal>
+
       </Content>
     </Layout>
   );

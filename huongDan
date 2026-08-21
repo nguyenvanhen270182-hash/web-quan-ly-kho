@@ -136,6 +136,6 @@ https://web-quan-ly-kho-phi.vercel.app/**
  /////
 
  sau này cập nhật git hup:
- git add .
-git commit -m "noi dung cap nhat mới"
+git add .
+git commit -m "noi dung cap nhat mới nhất"
 git push origin main
