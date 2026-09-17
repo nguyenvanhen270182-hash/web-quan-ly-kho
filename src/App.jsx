@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { 
   Layout, Table, Select, Button, Card, Space, 
   message, Tag, Flex, Typography, DatePicker, Row, Col, Tooltip,
-  Modal, Form, InputNumber, Input, Radio 
+  Modal, Form, InputNumber, Input, Radio, Grid 
 } from 'antd';
 import { 
   ReloadOutlined, ArrowUpOutlined, 
@@ -23,8 +23,12 @@ dayjs.extend(isBetween);
 const { Header, Content } = Layout;
 const { Title } = Typography;
 const { RangePicker } = DatePicker;
+const { useBreakpoint } = Grid;
 
 export default function App() {
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
+
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
@@ -168,15 +172,12 @@ export default function App() {
       if (r.receiver_name) recSet.add(r.receiver_name.trim());
       if (r.position_name) posSet.add(r.position_name.trim());
       
-      // Lọc biển số xe từ note
       if (r.note) {
         const m = r.note.match(/\|Xe:\s*([^|]+)/);
         const v = m ? m[1].trim() : '';
         if (v && v !== 'null' && v !== 'nulll') vehSet.add(v);
       }
 
-      // Lọc số phiếu theo filterType
-// Lọc số phiếu theo filterType
       const t = (r.type || '').toUpperCase();
       if (r.so_phieu) {
         if (filterType === 'OUT' && (t === 'OUT' || t === 'XUẤT')) tickSet.add(r.so_phieu.trim());
@@ -199,7 +200,6 @@ export default function App() {
     };
   }, [transactions, filterType]);
 
-  // Xóa toàn bộ bộ lọc
   const handleResetFilters = () => {
     setDateRange(null);
     setSearchProduct(null);
@@ -212,7 +212,7 @@ export default function App() {
   };
 
   // =========================================================================
-  // XỬ LÝ MỞ & LƯU PHIẾU ĐIỀU CHỈNH KHO (ADJUST_IN / ADJUST_OUT)
+  // XỬ LÝ MỞ & LƯU PHIẾU ĐIỀU CHỈNH KHO
   // =========================================================================
   const handleOpenAdjustModal = (record) => {
     setSelectedStockItem(record);
@@ -223,7 +223,8 @@ export default function App() {
     });
     setIsAdjustModalOpen(true);
   };
-const handleSaveAdjustment = async (values) => {
+
+  const handleSaveAdjustment = async (values) => {
     if (!selectedStockItem || !sessionUser) return;
     setAdjustLoading(true);
 
@@ -235,12 +236,10 @@ const handleSaveAdjustment = async (values) => {
       const isAdjustOut = values.adjust_type === 'ADJUST_OUT';
       const finalType = isAdjustOut ? 'ADJUST_OUT' : 'ADJUST_IN';
       
-      // Khởi tạo các mã định danh chuẩn theo format của hệ thống
       const txUuid = `TX_${rawUuid}`;
       const refUuid = `${isAdjustOut ? 'AJO' : 'AJI'}_${rawUuid}`;
       const autoTicket = `${isAdjustOut ? 'AJO' : 'AJI'}_${dayjs().format('YYYYMMDD_HHmmss')}`;
 
-      // 🔥 Lấy mã lô gốc của phiếu nhập để gán vào stock_uuid
       const originStockUuid = selectedStockItem.stock_uuid || selectedStockItem.uuid || selectedStockItem.ref_uuid || null;
 
       const newRecord = {
@@ -272,9 +271,7 @@ const handleSaveAdjustment = async (values) => {
       if (error) {
         message.error('Lỗi khi lưu phiếu điều chỉnh: ' + error.message);
       } else {
-        message.success(
-          `Đã tạo phiếu ${isAdjustOut ? 'ĐIỀU CHỈNH GIẢM' : 'ĐIỀU CHỈNH TĂNG'} thành công!`
-        );
+        message.success(`Đã tạo phiếu ${isAdjustOut ? 'ĐIỀU CHỈNH GIẢM' : 'ĐIỀU CHỈNH TĂNG'} thành công!`);
         setIsAdjustModalOpen(false);
         fetchData(selectedUser);
       }
@@ -284,8 +281,9 @@ const handleSaveAdjustment = async (values) => {
       setAdjustLoading(false);
     }
   };
+
   // =========================================================================
-  // LOGIC LỌC DỮ LIỆU TỔNG HỢP (TỒN KHO & NHẬP GỒM CẢ ADJUST_IN, ADJUST_OUT)
+  // LOGIC LỌC DỮ LIỆU TỔNG HỢP
   // =========================================================================
   const filteredTransactions = useMemo(() => {
     if (!transactions) return [];
@@ -299,7 +297,6 @@ const handleSaveAdjustment = async (values) => {
       return current.isBetween(start, end, null, '[]');
     };
 
-    // 1. TRƯỜNG HỢP TỒN KHO (> 0)
     if (filterType === 'STOCK') {
       const stockMap = new Map();
 
@@ -339,7 +336,6 @@ const handleSaveAdjustment = async (values) => {
 
           item.net = Number(row.net || item.net || 0);
           item.price = Number(row.price || item.price || 0);
-    // 🔥 Gán số phiếu và ngày theo Phiếu Nhập gốc
           item.so_phieu = row.so_phieu || item.so_phieu;
           item.date = row.date || item.date;
           item.note = row.note || item.note;
@@ -377,7 +373,6 @@ const handleSaveAdjustment = async (values) => {
       });
     }
 
-    // 2. TRƯỜNG HỢP GIAO DỊCH LỊCH SỬ (ALL, IN, OUT, ADJUST_IN, ADJUST_OUT)
     return transactions.filter((item) => {
       const t = (item.type || '').toUpperCase();
       let matchType = false;
@@ -415,7 +410,7 @@ const handleSaveAdjustment = async (values) => {
   ]);
 
   // =========================================================================
-  // TÍNH TOÁN TỔNG SỐ LƯỢNG & TỔNG TIỀN (TRỪ NẾU LÀ ADJUST_OUT)
+  // TÍNH TOÁN TỔNG SỐ LƯỢNG & TỔNG TIỀN
   // =========================================================================
   const summaryStats = useMemo(() => {
     let totalQty = 0;
@@ -442,32 +437,29 @@ const handleSaveAdjustment = async (values) => {
     };
   }, [filteredTransactions]);
 
-  // =========================================================================
-  // CẤU HÌNH CÁC CỘT TABLE
-  // =========================================================================
   const columns = [
     { 
       title: 'TT', 
       key: 'stt', 
-      width: 65, 
+      width: 55, 
       align: 'center',
       render: (_text, _record, index) => <b>{index + 1}</b>
     },
-    { title: 'Ngày', dataIndex: 'date', key: 'date', width: 110, align: 'center', render: (d) => <b>{d}</b> },
-    { title: 'Số Phiếu', dataIndex: 'so_phieu', key: 'so_phieu', width: 110 },
+    { title: 'Ngày', dataIndex: 'date', key: 'date', width: 105, align: 'center', render: (d) => <b>{d}</b> },
+    { title: 'Số Phiếu', dataIndex: 'so_phieu', key: 'so_phieu', width: 105 },
     {
       title: 'Loại',
       dataIndex: 'type',
       key: 'type',
-      width: 100,
+      width: 95,
       align: 'center',
       render: (type) => {
         const t = (type || '').toUpperCase();
         if (t === 'NHẬP' || t === 'IN') return <Tag color="green">NHẬP</Tag>;
         if (t === 'XUẤT' || t === 'OUT') return <Tag color="blue">XUẤT</Tag>;
-        if (t === 'ADJUST_IN') return <Tag color="cyan">Đ/C TĂNG</Tag>;
-        if (t === 'ADJUST_OUT') return <Tag color="volcano">Đ/C GIẢM</Tag>;
-        if (t === 'STOCK') return <Tag color="gold">TỒN KHO</Tag>;
+        if (t === 'ADJUST_IN') return <Tag color="cyan">Đ/C +</Tag>;
+        if (t === 'ADJUST_OUT') return <Tag color="volcano">Đ/C -</Tag>;
+        if (t === 'STOCK') return <Tag color="gold">TỒN</Tag>;
         return <Tag>{type}</Tag>;
       }
     },
@@ -480,7 +472,7 @@ const handleSaveAdjustment = async (values) => {
       title: 'Số Lượng', 
       dataIndex: 'so_luong', 
       align: 'right', 
-      width: 130,
+      width: 120,
       render: (sl, r) => {
         const t = (r.type || '').toUpperCase();
         const isAdjustOut = t === 'ADJUST_OUT';
@@ -499,13 +491,13 @@ const handleSaveAdjustment = async (values) => {
       title: 'Đơn Giá', 
       dataIndex: 'price', 
       align: 'right', 
-      width: 110,
+      width: 105,
       render: (p) => <span style={{ whiteSpace: 'nowrap' }}>{p ? `${p.toLocaleString()} đ` : '-'}</span> 
     },
     { 
       title: 'Ghi Chú', 
       dataIndex: 'note', 
-      key: 'note',
+      key: 'note', 
       ellipsis: { showTitle: false },
       render: (note) => (
         <Tooltip placement="topLeft" title={note || ''}>
@@ -516,7 +508,7 @@ const handleSaveAdjustment = async (values) => {
     ...(filterType === 'STOCK' ? [{
       title: 'Thao Tác',
       key: 'action',
-      width: 110,
+      width: 90,
       align: 'center',
       render: (_, record) => (
         <Button 
@@ -534,7 +526,6 @@ const handleSaveAdjustment = async (values) => {
     }] : [])
   ];
 
-  // 1. Màn hình chờ kiểm tra phiên
   if (checkingAuth) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: '#001529', color: '#fff' }}>
@@ -543,7 +534,6 @@ const handleSaveAdjustment = async (values) => {
     );
   }
 
-  // 2. Chuyển về màn hình Auth nếu chưa đăng nhập / chưa được duyệt
   if (!sessionUser) {
     return (
       <Auth 
@@ -555,7 +545,6 @@ const handleSaveAdjustment = async (values) => {
     );
   }
 
-  // Tính toán tồn kho dự kiến khi Modal mở
   const currentStockQty = Number(selectedStockItem?.so_luong || 0);
   const adjustType = watchAdjustType || 'ADJUST_IN';
   const adjustQty = Number(watchQuantity || 0);
@@ -563,15 +552,27 @@ const handleSaveAdjustment = async (values) => {
     ? currentStockQty + adjustQty 
     : Math.max(0, currentStockQty - adjustQty);
 
-  // 3. Giao diện chính sau khi đăng nhập thành công
   return (
-    <Layout style={{ minHeight: '100vh', background: '#4b8ef3' }}>
-      <Header style={{ background: '#001529', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 24px' }}>
-        <span style={{ fontSize: '18px', fontWeight: 'bold' }}>QUẢN LÝ KHO</span>
+    <Layout style={{ minHeight: '100vh', background: '#4b8ef3', width: '100%', overflowX: 'hidden' }}>
+      
+      {/* HEADER: Co giãn sát 2 mép viền */}
+      <Header style={{ 
+        background: '#001529', 
+        color: '#fff', 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        padding: isMobile ? '0 8px' : '0 24px',
+        height: 'auto',
+        minHeight: 56,
+        flexWrap: 'wrap',
+        gap: 6
+      }}>
+        <span style={{ fontSize: isMobile ? '15px' : '18px', fontWeight: 'bold' }}>QUẢN LÝ KHO</span>
         
-        <Flex align="center" gap={12}>
-          <Tag color="blue" style={{ fontSize: 13, padding: '3px 8px' }}>
-            👤 {sessionUser?.email || 'Người dùng'}
+        <Flex align="center" gap={6}>
+          <Tag color="blue" style={{ fontSize: 11, margin: 0, maxWidth: isMobile ? 180 : 'none', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            👤 {sessionUser?.email?.split('@')[0] || 'User'}
           </Tag>
           <Button 
             type="primary" 
@@ -580,28 +581,34 @@ const handleSaveAdjustment = async (values) => {
             icon={<LogoutOutlined />} 
             onClick={handleLogout}
           >
-            Đăng xuất
+            {isMobile ? '' : 'Đăng xuất'}
           </Button>
         </Flex>
       </Header>
 
-      <Content style={{ padding: '16px 24px', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
+      {/* CONTENT: Đệm 6px trên mobile giúp tối đa hóa không gian */}
+      <Content style={{ padding: isMobile ? '6px' : '16px 20px', width: '100%', boxSizing: 'border-box' }}>
         {currentView === 'HISTORY' && (
-          <Flex vertical gap="middle" style={{ width: '100%' }}>
-            <Flex justify="space-between" align="center" wrap="wrap" gap="middle">
-              <Title level={4} style={{ margin: 0, color: '#fff' }}>
-                {filterType === 'STOCK' ? '📦 Danh Sách Tồn Kho Khả Dụng (Click đúp hoặc bấm ✏️ Đ/C để điều chỉnh)' : 'Lịch Sử Giao Dịch'}
+          <Flex vertical gap={isMobile ? 'small' : 'middle'} style={{ width: '100%' }}>
+            
+            {/* TIÊU ĐỀ & DÀN NÚT HÀNH ĐỘNG */}
+            <Flex justify="space-between" align="center" wrap="wrap" gap="small">
+              <Title level={isMobile ? 5 : 4} style={{ margin: 0, color: '#fff', fontSize: isMobile ? 16 : 20 }}>
+                {filterType === 'STOCK' ? '📦 Tồn Kho Khả Dụng' : 'Lịch Sử Giao Dịch'}
               </Title>
-              <Space wrap>
+              
+              <Space wrap size={[6, 6]}>
                 <Button 
+                  size={isMobile ? 'small' : 'middle'}
                   icon={<PrinterOutlined />} 
                   onClick={() => printReportHistory({ filterType, dateRange, transactions, filteredData: filteredTransactions })}
                   style={{ background: '#faad14', color: '#fff', fontWeight: 'bold' }}
                 >
-                  In / Xuất PDF Báo Cáo
+                  In Báo Cáo
                 </Button>
                 
                 <Button 
+                  size={isMobile ? 'small' : 'middle'}
                   icon={<FileExcelOutlined />} 
                   onClick={() => exportExcelReportHistory({ filterType, filteredData: filteredTransactions })}
                   style={{ background: '#13c2c2', color: '#fff', fontWeight: 'bold' }}
@@ -611,15 +618,18 @@ const handleSaveAdjustment = async (values) => {
 
                 <Button 
                   type="primary" 
+                  size={isMobile ? 'small' : 'middle'}
                   style={{ background: '#52c41a' }} 
                   icon={<ArrowDownOutlined />} 
                   onClick={() => setCurrentView('IMPORT')}
                 >
                   Nhập Kho
                 </Button>
+                
                 <Button 
                   type="primary" 
                   danger 
+                  size={isMobile ? 'small' : 'middle'}
                   icon={<ArrowUpOutlined />} 
                   onClick={() => setCurrentView('EXPORT')}
                 >
@@ -628,19 +638,24 @@ const handleSaveAdjustment = async (values) => {
               </Space>
             </Flex>
 
-            <Card variant="borderless" style={{ background: '#9e2782', borderRadius: '8px', width: '100%' }}>
-              <Flex vertical gap="middle">
+            {/* KHUNG TÍM CHÍNH */}
+            <Card 
+              variant="borderless" 
+              bodyStyle={{ padding: isMobile ? '8px' : '16px' }}
+              style={{ background: '#9e2782', borderRadius: '8px', width: '100%' }}
+            >
+              <Flex vertical gap="small">
                 
-                {/* THANH ĐIỀU HƯỚNG LOẠI GIAO DỊCH & KHOẢNG NGÀY */}
+                {/* DÒNG BỘ LỌC CHÍNH */}
                 <Flex justify="space-between" wrap="wrap" gap="small" align="center">
-                  <Space wrap>
+                  <Flex wrap="wrap" gap="small" style={{ width: isMobile ? '100%' : 'auto' }}>
                     <Select 
                       value={filterType} 
                       onChange={(val) => {
                         setFilterType(val);
                         setSearchTicket(null);
                       }} 
-                      style={{ width: 170, fontWeight: 'bold' }} 
+                      style={{ width: isMobile ? '100%' : 160, fontWeight: 'bold' }} 
                       options={[
                         { label: 'Tất cả GD', value: 'ALL' },
                         { label: '📥 Nhập kho', value: 'IN' },
@@ -656,23 +671,24 @@ const handleSaveAdjustment = async (values) => {
                       onChange={setDateRange} 
                       format="YYYY-MM-DD"
                       placeholder={['Từ ngày', 'Đến ngày']}
-                      style={{ width: 240 }} 
+                      style={{ width: isMobile ? '100%' : 240 }} 
                       allowClear 
                     />
-                  </Space>
+                  </Flex>
 
                   <Button 
                     icon={<ReloadOutlined />} 
                     onClick={handleResetFilters} 
                     loading={loading}
+                    style={{ width: isMobile ? '100%' : 'auto' }}
                   >
-                    Xóa tất cả lọc / Làm mới
+                    Làm mới
                   </Button>
                 </Flex>
 
-                {/* BỘ LỌC DROPDOWN DISTINCT TỪ SUPABASE */}
-                <Card size="small" style={{ background: '#ffffff', borderRadius: '6px' }}>
-                  <Row gutter={[10, 10]}>
+                {/* BỘ LỌC CHI TIẾT TRONG KHUNG TRẮNG */}
+                <Card size="small" bodyStyle={{ padding: isMobile ? '8px' : '12px' }} style={{ background: '#ffffff', borderRadius: '6px' }}>
+                  <Row gutter={[8, 8]}>
                     <Col xs={24} sm={12} md={6}>
                       <Select 
                         showSearch
@@ -687,11 +703,12 @@ const handleSaveAdjustment = async (values) => {
                         }
                       />
                     </Col>
+
                     <Col xs={24} sm={12} md={6}>
                       <Select 
                         showSearch
                         allowClear
-                        placeholder="🏢 Chọn Khách hàng / NCC..." 
+                        placeholder="🏢 Chọn Khách hàng..." 
                         style={{ width: '100%' }}
                         value={searchCustomer}
                         onChange={setSearchCustomer}
@@ -701,6 +718,7 @@ const handleSaveAdjustment = async (values) => {
                         }
                       />
                     </Col>
+
                     <Col xs={24} sm={12} md={6}>
                       <Select 
                         showSearch
@@ -715,6 +733,7 @@ const handleSaveAdjustment = async (values) => {
                         }
                       />
                     </Col>
+
                     <Col xs={24} sm={12} md={6}>
                       <Select 
                         showSearch
@@ -753,10 +772,10 @@ const handleSaveAdjustment = async (values) => {
                         allowClear
                         placeholder={
                           filterType === 'OUT' 
-                            ? '📄 Chọn Số phiếu xuất...' 
+                            ? '📄 Số phiếu xuất...' 
                             : filterType === 'IN' 
-                            ? '📄 Chọn Số phiếu nhập...' 
-                            : '📄 Chọn Số phiếu...'
+                            ? '📄 Số phiếu nhập...' 
+                            : '📄 Số phiếu...'
                         } 
                         style={{ width: '100%' }}
                         value={searchTicket}
@@ -770,13 +789,14 @@ const handleSaveAdjustment = async (values) => {
                   </Row>
                 </Card>
 
-                {/* BẢNG GIAO DỊCH */}
+                {/* BẢNG DỮ LIỆU */}
                 <Table 
                   rowKey="id" 
+                  size={isMobile ? 'small' : 'middle'}
                   dataSource={filteredTransactions} 
                   columns={columns} 
                   loading={loading}
-                  scroll={{ x: 1000 }}
+                  scroll={{ x: 'max-content' }}
                   onRow={(record) => ({
                     onDoubleClick: () => {
                       if (filterType === 'STOCK') {
@@ -788,18 +808,19 @@ const handleSaveAdjustment = async (values) => {
                     },
                   })}
                   pagination={{ 
-                    defaultPageSize: 50,
+                    defaultPageSize: 20,
                     pageSizeOptions: ['10', '20', '50', '100'],
-                    showSizeChanger: true,
-                    showTotal: (total, range) => `${range[0]}-${range[1]} / Tổng ${total} dòng`
+                    showSizeChanger: !isMobile,
+                    simple: isMobile,
+                    showTotal: isMobile ? undefined : (total, range) => `${range[0]}-${range[1]} / Tổng ${total} dòng`
                   }}
-                  style={{ borderRadius: '8px', overflow: 'hidden' }}
+                  style={{ borderRadius: '6px', overflow: 'hidden' }}
                 />
 
               </Flex>
             </Card>
 
-            {/* KHỐI THỐNG KÊ TRỰC QUAN SAU KHI LỌC */}
+            {/* THỐNG KÊ TỔNG QUAN */}
             <Card 
               size="small" 
               style={{ 
@@ -810,23 +831,23 @@ const handleSaveAdjustment = async (values) => {
             >
               <Flex justify="space-around" align="center" wrap="wrap" gap="small">
                 <div>
-                  <span style={{ color: '#595959' }}>📋 Tổng số dòng: </span>
-                  <b style={{ fontSize: '16px', color: '#1890ff' }}>
+                  <span style={{ color: '#595959', fontSize: isMobile ? 12 : 14 }}>📋 Dòng: </span>
+                  <b style={{ fontSize: isMobile ? '14px' : '16px', color: '#1890ff' }}>
                     {summaryStats.totalRows.toLocaleString()}
                   </b>
                 </div>
 
                 <div>
-                  <span style={{ color: '#595959' }}>📦 Tổng số lượng: </span>
-                  <b style={{ fontSize: '18px', color: '#52c41a' }}>
+                  <span style={{ color: '#595959', fontSize: isMobile ? 12 : 14 }}>📦 Tổng số lượng: </span>
+                  <b style={{ fontSize: isMobile ? '15px' : '18px', color: '#52c41a' }}>
                     {summaryStats.totalQty.toLocaleString()}
                   </b>
                 </div>
 
                 {summaryStats.totalPrice > 0 && (
                   <div>
-                    <span style={{ color: '#595959' }}>💰 Tổng thành tiền: </span>
-                    <b style={{ fontSize: '18px', color: '#fa8c16' }}>
+                    <span style={{ color: '#595959', fontSize: isMobile ? 12 : 14 }}>💰 Tổng tiền: </span>
+                    <b style={{ fontSize: isMobile ? '15px' : '18px', color: '#fa8c16' }}>
                       {summaryStats.totalPrice.toLocaleString()} đ
                     </b>
                   </div>
@@ -851,29 +872,30 @@ const handleSaveAdjustment = async (values) => {
           />
         )}
 
-        {/* MODAL ĐIỀU CHỈNH TĂNG / GIẢM TỒN KHO */}
+        {/* MODAL ĐIỀU CHỈNH TĂNG / GIẢM */}
         <Modal
-          title={`⚖️ Điều Chỉnh Kiểm Kê: ${selectedStockItem?.product_name || ''}`}
+          title={`⚖️ Đ/C: ${selectedStockItem?.product_name || ''}`}
           open={isAdjustModalOpen}
           onCancel={() => setIsAdjustModalOpen(false)}
           onOk={() => form.submit()}
           confirmLoading={adjustLoading}
-          okText="Lưu phiếu điều chỉnh"
-          cancelText="Hủy bỏ"
+          okText="Lưu phiếu"
+          cancelText="Hủy"
+          width={isMobile ? '95%' : 520}
         >
-          <div style={{ marginBottom: 16, background: '#f5f5f5', padding: 12, borderRadius: 6 }}>
-            <div>Vị trí kho: <b>{selectedStockItem?.position_name || selectedStockItem?.pos || 'Mặc định'}</b></div>
+          <div style={{ marginBottom: 12, background: '#f5f5f5', padding: 10, borderRadius: 6 }}>
+            <div>Vị trí: <b>{selectedStockItem?.position_name || selectedStockItem?.pos || 'Mặc định'}</b></div>
             <div style={{ marginTop: 4 }}>
-              Tồn hiện tại: <b style={{ color: '#d46b08', fontSize: 15 }}>{currentStockQty.toLocaleString()} {selectedStockItem?.dvt}</b>
+              Tồn hiện tại: <b style={{ color: '#d46b08', fontSize: 14 }}>{currentStockQty.toLocaleString()} {selectedStockItem?.dvt}</b>
             </div>
             <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px dashed #d9d9d9' }}>
-              Tồn dự kiến sau điều chỉnh: {' '}
-              <b style={{ color: adjustType === 'ADJUST_IN' ? '#389e0d' : '#cf1322', fontSize: 16 }}>
+              Tồn sau điều chỉnh: {' '}
+              <b style={{ color: adjustType === 'ADJUST_IN' ? '#389e0d' : '#cf1322', fontSize: 15 }}>
                 {projectedStock.toLocaleString()} {selectedStockItem?.dvt}
               </b>
               {adjustType === 'ADJUST_OUT' && adjustQty > currentStockQty && (
                 <div style={{ color: '#ff4d4f', fontSize: 12, marginTop: 2 }}>
-                  ⚠️ Số lượng giảm lớn hơn số tồn hiện có trong kho!
+                  ⚠️ Số lượng giảm lớn hơn số tồn hiện có!
                 </div>
               )}
             </div>
@@ -881,15 +903,15 @@ const handleSaveAdjustment = async (values) => {
 
           <Form form={form} layout="vertical" onFinish={handleSaveAdjustment}>
             <Form.Item name="adjust_type" label="Loại điều chỉnh" rules={[{ required: true }]}>
-              <Radio.Group buttonStyle="solid">
-                <Radio.Button value="ADJUST_IN" style={{ color: '#389e0d' }}>➕ Điều chỉnh TĂNG</Radio.Button>
-                <Radio.Button value="ADJUST_OUT" style={{ color: '#cf1322' }}>➖ Điều chỉnh GIẢM</Radio.Button>
+              <Radio.Group buttonStyle="solid" style={{ width: '100%', display: 'flex' }}>
+                <Radio.Button value="ADJUST_IN" style={{ flex: 1, textAlign: 'center', color: '#389e0d' }}>➕ TĂNG</Radio.Button>
+                <Radio.Button value="ADJUST_OUT" style={{ flex: 1, textAlign: 'center', color: '#cf1322' }}>➖ GIẢM</Radio.Button>
               </Radio.Group>
             </Form.Item>
 
             <Form.Item 
               name="quantity" 
-              label={adjustType === 'ADJUST_IN' ? 'Số lượng cần TĂNG THÊM (+)' : 'Số lượng cần GIẢM BỚT (-)'}
+              label="Số lượng điều chỉnh"
               rules={[
                 { required: true, message: 'Vui lòng nhập số lượng!' },
                 { 
@@ -907,12 +929,12 @@ const handleSaveAdjustment = async (values) => {
                 min={1} 
                 max={adjustType === 'ADJUST_OUT' ? currentStockQty : undefined}
                 style={{ width: '100%' }} 
-                placeholder={adjustType === 'ADJUST_IN' ? 'Ví dụ: Tăng thêm 50...' : 'Ví dụ: Giảm bớt 20...'} 
+                placeholder="Nhập số lượng..." 
               />
             </Form.Item>
 
-            <Form.Item name="note" label="Lý do / Ghi chú kiểm kê">
-              <Input.TextArea rows={2} placeholder="Ví dụ: Kiểm kê cuối tháng thừa/thiếu hàng..." />
+            <Form.Item name="note" label="Lý do điều chỉnh">
+              <Input.TextArea rows={2} placeholder="Ví dụ: Kiểm kê thừa/thiếu..." />
             </Form.Item>
           </Form>
         </Modal>

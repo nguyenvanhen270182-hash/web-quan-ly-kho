@@ -1,20 +1,24 @@
 import React, { useEffect, useState } from 'react';
 import { 
   Card, Form, Input, InputNumber, DatePicker, Button, 
-  AutoComplete, Row, Col, message, Alert, Divider, Typography, Flex 
+  AutoComplete, Row, Col, message, Alert, Divider, Typography, Flex, Grid 
 } from 'antd';
 import { 
   LeftOutlined, PlusOutlined, DeleteOutlined, 
   SaveOutlined, RedoOutlined, HistoryOutlined,
-  FilePdfOutlined, FileExcelOutlined, PrinterOutlined 
+  FilePdfOutlined, FileExcelOutlined 
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { supabase } from '../supabaseClient';
 import { exportPdfPhieuNhap, exportExcelPhieuNhap } from '../utils/exportWebUtils';
 
 const { Text } = Typography;
+const { useBreakpoint } = Grid;
 
 export default function ImportStock({ selectedUser, onBack }) {
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
+
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   
@@ -216,7 +220,6 @@ export default function ImportStock({ selectedUser, onBack }) {
     } else {
       message.success(`Đã lưu thành công ${insertPayload.length} dòng hàng!`);
       
-      // Lưu toàn bộ dữ liệu phiếu vừa nhập vào state để phục vụ xuất PDF/Excel
       setSavedData({
         soPhieu: values.so_phieu,
         customerName: values.customer_name || 'All',
@@ -240,9 +243,10 @@ export default function ImportStock({ selectedUser, onBack }) {
 
   return (
     <Card 
-      title="PHIẾU NHẬP HÀNG CHI TIẾT" 
-      extra={<Button icon={<LeftOutlined />} onClick={onBack}>Quay lại</Button>}
-      style={{ maxWidth: 1150, margin: '0 auto', background: '#ffffff', borderRadius: '12px' }}
+      title={<span style={{ fontWeight: 'bold', fontSize: isMobile ? 16 : 18 }}>PHIẾU NHẬP HÀNG CHI TIẾT</span>} 
+      extra={<Button icon={<LeftOutlined />} onClick={onBack} size={isMobile ? 'small' : 'middle'} style={{ fontWeight: 'bold' }}>Quay lại</Button>}
+      bodyStyle={{ padding: isMobile ? '8px' : '16px' }}
+      style={{ maxWidth: 1150, width: '100%', margin: '0 auto', background: '#ffffff', borderRadius: '8px' }}
     >
       <Form 
         form={form} 
@@ -258,14 +262,14 @@ export default function ImportStock({ selectedUser, onBack }) {
         <Form.Item name="position_code" hidden><Input /></Form.Item>
 
         {/* THÔNG TIN CHUNG */}
-        <Card size="small" title="Thông tin chung" style={{ background: '#fafafa', marginBottom: 16 }}>
-          <Row gutter={12}>
-            <Col xs={24} sm={12} md={8}>
+        <Card size="small" title="Thông tin chung" bodyStyle={{ padding: isMobile ? '8px' : '12px' }} style={{ background: '#fafafa', marginBottom: 12 }}>
+          <Row gutter={[8, 4]}>
+            <Col xs={12} sm={12} md={8}>
               <Form.Item name="date" label="Ngày giao dịch" rules={[{ required: true, message: 'Chọn ngày' }]}>
                 <DatePicker style={{ width: '100%' }} format="YYYY-MM-DD" />
               </Form.Item>
             </Col>
-            <Col xs={24} sm={12} md={8}>
+            <Col xs={12} sm={12} md={8}>
               <Form.Item name="so_phieu" label="Số Phiếu" rules={[{ required: true, message: 'Nhập số phiếu' }]}>
                 <Input placeholder="VD: PN049" style={{ fontWeight: 'bold' }} />
               </Form.Item>
@@ -282,8 +286,8 @@ export default function ImportStock({ selectedUser, onBack }) {
             </Col>
           </Row>
 
-          <Row gutter={12}>
-            <Col xs={24} sm={8} md={8}>
+          <Row gutter={[8, 4]}>
+            <Col xs={12} sm={8} md={8}>
               <Form.Item name="position_name" label="Place / Vị trí">
                 <AutoComplete
                   options={positionList}
@@ -293,16 +297,16 @@ export default function ImportStock({ selectedUser, onBack }) {
                 />
               </Form.Item>
             </Col>
-            <Col xs={24} sm={8} md={8}>
+            <Col xs={12} sm={8} md={8}>
               <Form.Item name="lot_no" label="Lot No">
-                <Input placeholder="Lot No (nếu có)" />
+                <Input placeholder="Lot No nếu có" />
               </Form.Item>
             </Col>
             <Col xs={24} sm={8} md={8}>
               <Form.Item name="so_xe" label="Số Xe">
                 <AutoComplete
                   options={vehicleOptions}
-                  placeholder="Số xe tải"
+                  placeholder="Số xe tải..."
                   filterOption={(input, option) => option.value.toUpperCase().includes(input.toUpperCase())}
                 />
               </Form.Item>
@@ -311,28 +315,29 @@ export default function ImportStock({ selectedUser, onBack }) {
         </Card>
 
         {/* DANH SÁCH DÒNG HÀNG */}
-        <Divider orientation="left">Danh Sách Dòng Hàng</Divider>
+        <Divider orientation="left" style={{ margin: '12px 0', fontSize: isMobile ? 14 : 16 }}>Danh Sách Dòng Hàng</Divider>
 
         <Form.List name="items">
           {(fields, { add, remove }) => (
-            <Flex vertical gap="middle" style={{ width: '100%' }}>
+            <Flex vertical gap="small" style={{ width: '100%' }}>
               {fields.map(({ key, name, ...restField }, index) => (
                 <Card 
                   key={key} 
                   size="small" 
-                  title={<Text type="secondary">Dòng hàng #{index + 1}</Text>}
+                  bodyStyle={{ padding: isMobile ? '8px' : '12px' }}
+                  title={<Text strong style={{ fontSize: isMobile ? 13 : 14 }}>Dòng hàng #{index + 1}</Text>}
                   extra={
                     fields.length > 1 && (
-                      <Button type="text" danger icon={<DeleteOutlined />} onClick={() => remove(name)}>
-                        Xóa dòng
+                      <Button type="text" danger size="small" icon={<DeleteOutlined />} onClick={() => remove(name)}>
+                        Xóa
                       </Button>
                     )
                   }
-                  style={{ background: '#fcfcfc', border: '1px solid #e8e8e8' }}
+                  style={{ background: '#fcfcfc', border: '1px solid #e8e8e8', borderRadius: 6 }}
                 >
                   <Form.Item {...restField} name={[name, 'product_code']} hidden><Input /></Form.Item>
 
-                  <Row gutter={10}>
+                  <Row gutter={[6, 4]}>
                     <Col xs={24} md={8}>
                       <Form.Item
                         {...restField}
@@ -342,23 +347,23 @@ export default function ImportStock({ selectedUser, onBack }) {
                       >
                         <AutoComplete
                           options={productList}
-                          placeholder="Chọn SP để tự điền ĐVT, Net"
+                          placeholder="Chọn SP..."
                           onSelect={(val) => handleSelectProduct(val, name)}
                           filterOption={(input, option) => option.value.toUpperCase().includes(input.toUpperCase())}
                         />
                       </Form.Item>
                     </Col>
-                    <Col xs={12} md={4}>
+                    <Col xs={8} sm={8} md={4}>
                       <Form.Item {...restField} name={[name, 'dvt']} label="ĐVT">
-                        <Input placeholder="Thùng" />
+                        <Input placeholder="Thùng" style={{ textAlign: 'center' }} />
                       </Form.Item>
                     </Col>
-                    <Col xs={12} md={4}>
+                    <Col xs={8} sm={8} md={4}>
                       <Form.Item {...restField} name={[name, 'net']} label="Net">
                         <InputNumber min={0} style={{ width: '100%' }} onChange={() => handleItemChange(name)} />
                       </Form.Item>
                     </Col>
-                    <Col xs={12} md={4}>
+                    <Col xs={8} sm={8} md={4}>
                       <Form.Item
                         {...restField}
                         name={[name, 'so_luong']}
@@ -368,31 +373,28 @@ export default function ImportStock({ selectedUser, onBack }) {
                         <InputNumber min={1} style={{ width: '100%' }} onChange={() => handleItemChange(name)} />
                       </Form.Item>
                     </Col>
-                    <Col xs={12} md={4}>
+                    <Col xs={12} sm={12} md={4}>
                       <Form.Item {...restField} name={[name, 'tong_net']} label="Tổng Net">
                         <InputNumber disabled style={{ width: '100%', fontWeight: 'bold' }} />
                       </Form.Item>
                     </Col>
-                  </Row>
-
-                  <Row gutter={10}>
-                    <Col xs={12} md={4}>
+                    <Col xs={12} sm={12} md={4}>
                       <Form.Item {...restField} name={[name, 'price']} label="Đơn Giá">
                         <InputNumber min={0} style={{ width: '100%' }} />
                       </Form.Item>
                     </Col>
-                    <Col xs={12} md={5}>
+                    <Col xs={12} sm={12} md={5}>
                       <Form.Item {...restField} name={[name, 'mfg']} label="Ngày SX">
                         <DatePicker style={{ width: '100%' }} format="YYYY-MM-DD" placeholder="NSX" />
                       </Form.Item>
                     </Col>
-                    <Col xs={12} md={5}>
+                    <Col xs={12} sm={12} md={5}>
                       <Form.Item {...restField} name={[name, 'exp']} label="HSD">
                         <DatePicker style={{ width: '100%' }} format="YYYY-MM-DD" placeholder="HSD" />
                       </Form.Item>
                     </Col>
                     <Col xs={24} md={10}>
-                      <Form.Item {...restField} name={[name, 'note']} label="Ghi chú dòng hàng">
+                      <Form.Item {...restField} name={[name, 'note']} label="Ghi chú dòng hàng" style={{ marginBottom: 0 }}>
                         <Input placeholder="VD: đẹp 10, dẽo bạc..." />
                       </Form.Item>
                     </Col>
@@ -405,9 +407,9 @@ export default function ImportStock({ selectedUser, onBack }) {
                 onClick={() => add({ net: 8.8, so_luong: 1, tong_net: 8.8, price: 0, dvt: 'Thùng' })} 
                 block 
                 icon={<PlusOutlined />}
-                style={{ height: 45 }}
+                style={{ height: 40 }}
               >
-                Thêm nhiều hàng (Thêm dòng mới)
+                Thêm Dòng Mới
               </Button>
             </Flex>
           )}
@@ -419,7 +421,7 @@ export default function ImportStock({ selectedUser, onBack }) {
           icon={<SaveOutlined />} 
           loading={loading} 
           block 
-          style={{ height: 50, marginTop: 24, fontSize: 16, fontWeight: 'bold', background: '#52c41a' }}
+          style={{ height: 44, marginTop: 16, fontSize: 16, fontWeight: 'bold', background: '#52c41a' }}
         >
           LƯU PHIẾU NHẬP
         </Button>
@@ -427,18 +429,17 @@ export default function ImportStock({ selectedUser, onBack }) {
 
       {/* THẺ KẾT QUẢ VỪA LƯU & TÙY CHỌN XUẤT FILE */}
       {savedData && (
-        <Card style={{ marginTop: 20, background: '#f6ffed', borderColor: '#b7eb8f', borderRadius: 8 }}>
-          <Flex vertical gap="middle">
+        <Card style={{ marginTop: 16, background: '#f6ffed', borderColor: '#b7eb8f', borderRadius: 8 }}>
+          <Flex vertical gap="small">
             <Alert
               message={`✅ Đã nhập kho thành công phiếu #${savedData.soPhieu} (${savedData.items.length} dòng hàng)`}
               type="success"
               showIcon
             />
             
-            {/* KHUNG TÙY CHỌN XUẤT FILE PHIẾU NHẬP */}
-            <Card size="small" title="Tùy chọn in & Xuất file phiếu nhập vừa tạo" style={{ background: '#fff' }}>
-              <Row gutter={[12, 12]}>
-                <Col xs={24} sm={12}>
+            <Card size="small" title="Tùy chọn in & Xuất file" style={{ background: '#fff' }}>
+              <Row gutter={[8, 8]}>
+                <Col xs={12} sm={12}>
                   <Button 
                     type="primary" 
                     danger 
@@ -446,26 +447,26 @@ export default function ImportStock({ selectedUser, onBack }) {
                     block 
                     onClick={() => exportPdfPhieuNhap(savedData)}
                   >
-                    Xuất PDF Phiếu Nhập
+                    Xuất PDF
                   </Button>
                 </Col>
-                <Col xs={24} sm={12}>
+                <Col xs={12} sm={12}>
                   <Button 
                     style={{ background: '#388E3C', color: '#fff' }} 
                     icon={<FileExcelOutlined />} 
                     block 
                     onClick={() => exportExcelPhieuNhap(savedData)}
                   >
-                    Xuất Excel (.xlsx)
+                    Xuất Excel
                   </Button>
                 </Col>
               </Row>
             </Card>
 
-            <Row gutter={12}>
+            <Row gutter={[8, 8]}>
               <Col span={12}>
                 <Button icon={<RedoOutlined />} onClick={handleClearForm} block>
-                  Tạo Phiếu Nhập Mới
+                  Tạo Phiếu Mới
                 </Button>
               </Col>
               <Col span={12}>
@@ -476,7 +477,7 @@ export default function ImportStock({ selectedUser, onBack }) {
                   block 
                   style={{ background: '#1890ff' }}
                 >
-                  📊 Xem Lịch Sử
+                  Xem Lịch Sử
                 </Button>
               </Col>
             </Row>

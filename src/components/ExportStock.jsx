@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { 
   Card, Form, Input, InputNumber, DatePicker, Button, 
-  Table, Modal, Row, Col, Typography, Flex, Tag, Space, AutoComplete, Alert, message 
+  Table, Modal, Row, Col, Typography, Flex, Tag, Space, AutoComplete, Alert, message, Grid 
 } from 'antd';
 import { 
   LeftOutlined, PlusCircleOutlined, DeleteOutlined, 
@@ -13,8 +13,12 @@ import { supabase } from '../supabaseClient';
 import { exportPdfPhieuXuat, exportExcelPhieuXuat } from '../utils/exportWebUtils';
 
 const { Text, Title } = Typography;
+const { useBreakpoint } = Grid;
 
 export default function ExportStock({ selectedUser, onBack }) {
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
+
   const [form] = Form.useForm();
   const [messageApi, contextHolder] = message.useMessage();
 
@@ -107,7 +111,6 @@ export default function ExportStock({ selectedUser, onBack }) {
     }
   };
 
-  // 2. CHỌN NGƯỜI NHẬN -> TỰ ĐIỀN ĐỊA CHỈ & SĐT
   const handleSelectReceiver = (val) => {
     const found = receiverList.find((r) => r.value.toLowerCase() === val.toLowerCase());
     if (found) {
@@ -119,7 +122,7 @@ export default function ExportStock({ selectedUser, onBack }) {
     }
   };
 
-  // 3. TÍNH TOÁN TỒN KHO VÀ GIỮ LẠI NGÀY NHẬP GỐC
+  // 3. TÍNH TOÁN TỒN KHO
   const fetchAvailableStock = async () => {
     setLoadingStock(true);
     try {
@@ -202,7 +205,6 @@ export default function ExportStock({ selectedUser, onBack }) {
     fetchAvailableStock();
   };
 
-  // 4. THÊM CÁC DÒNG ĐÃ CHỌN VÀO FORM
   const handleAddSelectedStockToForm = () => {
     if (selectedStockRows.length === 0) {
       messageApi.warning('Vui lòng chọn ít nhất 1 mặt hàng tồn!');
@@ -235,7 +237,6 @@ export default function ExportStock({ selectedUser, onBack }) {
     setIsModalOpen(false);
   };
 
-  // 5. CẢNH BÁO VƯỢT TỒN
   const handleQuantityChange = (val, fieldIndex) => {
     const items = form.getFieldValue('items') || [];
     const item = items[fieldIndex];
@@ -263,7 +264,6 @@ export default function ExportStock({ selectedUser, onBack }) {
     form.setFieldsValue({ items: [...items] });
   };
 
-  // 6. LƯU PHIẾU XUẤT VÀO SUPABASE
   const handleSave = async (values) => {
     if (!values.items || values.items.length === 0) {
       messageApi.warning('Vui lòng chọn ít nhất 1 mặt hàng để xuất!');
@@ -362,16 +362,17 @@ export default function ExportStock({ selectedUser, onBack }) {
   const totalNet = formItems.reduce((sum, item) => sum + Number(item?.tong_net || 0), 0);
 
   const stockColumns = [
-    { title: 'Tên Sản Phẩm', dataIndex: 'product_name', key: 'product_name', render: (t) => <b>{t}</b> },
-    { title: 'Chủ Hàng (NCC)', dataIndex: 'customer_name', key: 'customer_name' },
-    { title: 'Vị Trí', dataIndex: 'position_name', key: 'position_name' },
-    { title: 'ĐVT', dataIndex: 'dvt', key: 'dvt', width: 80, align: 'center' },
-    { title: 'Net', dataIndex: 'net', key: 'net', width: 80, align: 'right' },
+    { title: 'Tên Sản Phẩm', dataIndex: 'product_name', key: 'product_name', width: 140, render: (t) => <b>{t}</b> },
+    { title: 'Chủ Hàng', dataIndex: 'customer_name', key: 'customer_name', width: 120 },
+    { title: 'Vị Trí', dataIndex: 'position_name', key: 'position_name', width: 110 },
+    { title: 'ĐVT', dataIndex: 'dvt', key: 'dvt', width: 75, align: 'center' },
+    { title: 'Net', dataIndex: 'net', key: 'net', width: 75, align: 'right' },
     { 
       title: 'Tồn Khả Dụng', 
       dataIndex: 'ton_sl', 
       key: 'ton_sl', 
       align: 'right', 
+      width: 130,
       render: (sl, r) => (
         <Tag color={existingStockUuids.includes(r.stock_uuid) ? 'default' : 'green'} style={{ fontWeight: 'bold' }}>
           {sl} {r.dvt} ({r.ton_net} kg)
@@ -381,6 +382,7 @@ export default function ExportStock({ selectedUser, onBack }) {
     {
       title: 'Trạng thái',
       key: 'status',
+      width: 95,
       align: 'center',
       render: (_, r) => existingStockUuids.includes(r.stock_uuid) ? <Tag color="orange">Đã chọn</Tag> : <Tag color="blue">Sẵn sàng</Tag>
     }
@@ -393,40 +395,42 @@ export default function ExportStock({ selectedUser, onBack }) {
       s.customer_name?.toLowerCase().includes(term) || 
       s.position_name?.toLowerCase().includes(term);
   });
-    // Gom nhóm tổng số lượng & Kgs theo từng Tên Sản Phẩm (kèm Net)
-    const groupedSummary = useMemo(() => {
-      const map = new Map();
 
-      formItems.forEach((item) => {
-        if (!item?.product_name) return;
-        const name = item.product_name.trim();
-        const net = Number(item.net || 0);
-        const key = `${name}___${net}`; // Phân biệt theo Tên + Net
-        const sl = Number(item.so_luong || 0);
-        const kgs = Number(item.tong_net || Math.round(sl * net * 100) / 100);
+  const groupedSummary = useMemo(() => {
+    const map = new Map();
 
-        if (!map.has(key)) {
-          map.set(key, {
-            product_name: name,
-            dvt: item.dvt || 'Thùng',
-            net: net,
-            total_sl: 0,
-            total_kgs: 0,
-          });
-        }
+    formItems.forEach((item) => {
+      if (!item?.product_name) return;
+      const name = item.product_name.trim();
+      const net = Number(item.net || 0);
+      const key = `${name}___${net}`;
+      const sl = Number(item.so_luong || 0);
+      const kgs = Number(item.tong_net || Math.round(sl * net * 100) / 100);
 
-        const current = map.get(key);
-        current.total_sl += sl;
-        current.total_kgs += kgs;
-      });
+      if (!map.has(key)) {
+        map.set(key, {
+          product_name: name,
+          dvt: item.dvt || 'Thùng',
+          net: net,
+          total_sl: 0,
+          total_kgs: 0,
+        });
+      }
 
-      return Array.from(map.values());
-    }, [formItems]);
+      const current = map.get(key);
+      current.total_sl += sl;
+      current.total_kgs += kgs;
+    });
+
+    return Array.from(map.values());
+  }, [formItems]);
+
   return (
     <Card 
-      title="PHIẾU XUẤT KHO" 
-      extra={<Button icon={<LeftOutlined />} onClick={onBack}>Quay lại</Button>}
-      style={{ maxWidth: 1150, margin: '0 auto', background: '#ffffff', borderRadius: '12px' }}
+      title={<span style={{ fontWeight: 'bold', fontSize: isMobile ? 16 : 18 }}>PHIẾU XUẤT KHO</span>} 
+      extra={<Button icon={<LeftOutlined />} onClick={onBack} size={isMobile ? 'small' : 'middle'} style={{ fontWeight: 'bold' }}>Quay lại</Button>}
+      bodyStyle={{ padding: isMobile ? '8px' : '16px' }}
+      style={{ maxWidth: 1150, width: '100%', margin: '0 auto', background: '#ffffff', borderRadius: '8px' }}
     >
       {contextHolder}
 
@@ -442,14 +446,14 @@ export default function ExportStock({ selectedUser, onBack }) {
         <Form.Item name="receiver_code" hidden><Input /></Form.Item>
 
         {/* HEADER PHIẾU XUẤT */}
-        <Card size="small" title="Thông tin phiếu xuất & Người nhận" style={{ background: '#f5faff', borderColor: '#91caff', marginBottom: 16 }}>
-          <Row gutter={12}>
-            <Col xs={24} sm={12} md={8}>
+        <Card size="small" title="Thông tin phiếu xuất & Người nhận" bodyStyle={{ padding: isMobile ? '8px' : '12px' }} style={{ background: '#f5faff', borderColor: '#91caff', marginBottom: 12 }}>
+          <Row gutter={[8, 4]}>
+            <Col xs={12} sm={12} md={8}>
               <Form.Item name="date" label="Ngày xuất" rules={[{ required: true, message: 'Chọn ngày' }]}>
                 <DatePicker style={{ width: '100%' }} format="YYYY-MM-DD" />
               </Form.Item>
             </Col>
-            <Col xs={24} sm={12} md={8}>
+            <Col xs={12} sm={12} md={8}>
               <Form.Item name="so_phieu" label="Số Phiếu Xuất" rules={[{ required: true, message: 'Nhập số phiếu' }]}>
                 <Input placeholder="VD: PX001" style={{ fontWeight: 'bold' }} />
               </Form.Item>
@@ -458,20 +462,20 @@ export default function ExportStock({ selectedUser, onBack }) {
               <Form.Item name="giam_sat" label="Giám sát / Thủ kho">
                 <AutoComplete
                   options={giamSatOptions}
-                  placeholder="Chọn / Gõ tên giám sát"
+                  placeholder="Chọn / Gõ tên GS"
                   filterOption={(input, option) => option.value.toUpperCase().includes(input.toUpperCase())}
                 />
               </Form.Item>
             </Col>
           </Row>
 
-          <Row gutter={12}>
+          <Row gutter={[8, 4]}>
             <Col xs={24} sm={12} md={8}>
               <Form.Item name="receiver_name" label="Khách hàng / Người nhận" rules={[{ required: true, message: 'Nhập người nhận' }]}>
                 <AutoComplete
                   options={receiverList}
                   onSelect={handleSelectReceiver}
-                  placeholder="Chọn để tự điền địa chỉ, SĐT"
+                  placeholder="Chọn để tự điền thông tin"
                   filterOption={(input, option) => option.value.toUpperCase().includes(input.toUpperCase())}
                 />
               </Form.Item>
@@ -497,7 +501,7 @@ export default function ExportStock({ selectedUser, onBack }) {
             </Col>
           </Row>
 
-          <Row gutter={12}>
+          <Row gutter={[8, 4]}>
             <Col span={24}>
               <Form.Item name="note" label="Ghi chú phiếu xuất" style={{ marginBottom: 0 }}>
                 <Input placeholder="VD: xuất chiều, kiểm đếm kỹ..." />
@@ -506,26 +510,27 @@ export default function ExportStock({ selectedUser, onBack }) {
           </Row>
         </Card>
 
-        {/* NÚT THÊM TỒN KHO */}
-        <Flex justify="space-between" align="center" style={{ marginBottom: 12 }}>
-          <Title level={5} style={{ margin: 0 }}>Danh Sách Hàng Xuất</Title>
+        {/* THANH CÔNG CỤ DÒNG HÀNG XUẤT */}
+        <Flex justify="space-between" align="center" style={{ marginBottom: 10 }}>
+          <Title level={5} style={{ margin: 0, fontSize: isMobile ? 14 : 16 }}>Danh Sách Hàng Xuất</Title>
           <Button 
             type="primary" 
+            size={isMobile ? 'small' : 'middle'}
             icon={<PlusCircleOutlined />} 
             onClick={handleOpenStockModal}
             style={{ background: '#1890ff', fontWeight: 'bold' }}
           >
-            + Chọn THÊM Xuất (Từ Tồn Kho)
+            + Chọn Từ Tồn Kho
           </Button>
         </Flex>
 
         {/* DANH SÁCH CÁC DÒNG HÀNG XUẤT */}
         <Form.List name="items">
           {(fields, { remove }) => (
-            <Flex vertical gap="middle" style={{ width: '100%' }}>
+            <Flex vertical gap="small" style={{ width: '100%' }}>
               {fields.length === 0 && (
                 <Card style={{ textAlign: 'center', background: '#fafafa', borderStyle: 'dashed' }}>
-                  <Text type="secondary">Chưa có dòng hàng nào. Bấm nút <b>"+ Chọn THÊM Xuất"</b> ở trên để chọn hàng từ kho.</Text>
+                  <Text type="secondary">Chưa có dòng hàng nào. Bấm nút <b>"+ Chọn Từ Tồn Kho"</b> ở trên để chọn hàng.</Text>
                 </Card>
               )}
 
@@ -539,22 +544,23 @@ export default function ExportStock({ selectedUser, onBack }) {
                   <Card 
                     key={key} 
                     size="small" 
+                    bodyStyle={{ padding: isMobile ? '8px' : '12px' }}
                     title={
-                      <Space wrap>
-                        <Text strong>#{index + 1}. {itemData.product_name}</Text>
-                        <Tag color="blue">Chủ: {itemData.customer_name || 'N/A'}</Tag>
-                        <Tag color="cyan">Vị trí: {itemData.position_name || 'N/A'}</Tag>
-                        <Tag color={remainingTon < 0 ? 'red' : 'orange'} style={{ fontWeight: 'bold' }}>
-                          Tồn còn lại: {remainingTon} / {originTon} {itemData.dvt}
+                      <Space wrap size={[4, 4]}>
+                        <Text strong style={{ fontSize: isMobile ? 13 : 14 }}>#{index + 1}. {itemData.product_name}</Text>
+                        <Tag color="blue" style={{ fontSize: 11 }}>Chủ: {itemData.customer_name || 'N/A'}</Tag>
+                        <Tag color="cyan" style={{ fontSize: 11 }}>Vị trí: {itemData.position_name || 'N/A'}</Tag>
+                        <Tag color={remainingTon < 0 ? 'red' : 'orange'} style={{ fontWeight: 'bold', fontSize: 11 }}>
+                          Còn: {remainingTon} / {originTon} {itemData.dvt}
                         </Tag>
                       </Space>
                     }
                     extra={
-                      <Button type="text" danger icon={<DeleteOutlined />} onClick={() => remove(name)}>
+                      <Button type="text" danger size="small" icon={<DeleteOutlined />} onClick={() => remove(name)}>
                         Xóa
                       </Button>
                     }
-                    style={{ background: '#fcfcfc', border: '1px solid #d9d9d9' }}
+                    style={{ background: '#fcfcfc', border: '1px solid #d9d9d9', borderRadius: 6 }}
                   >
                     <Form.Item {...restField} name={[name, 'product_name']} hidden><Input /></Form.Item>
                     <Form.Item {...restField} name={[name, 'product_code']} hidden><Input /></Form.Item>
@@ -567,25 +573,27 @@ export default function ExportStock({ selectedUser, onBack }) {
                     <Form.Item {...restField} name={[name, 'stock_uuid']} hidden><Input /></Form.Item>
                     <Form.Item {...restField} name={[name, 'import_date']} hidden><Input /></Form.Item>
 
-                    <Row gutter={10}>
-                      <Col xs={12} md={4}>
-                        <Form.Item {...restField} name={[name, 'dvt']} label="ĐVT">
-                          <Input disabled />
+                    <Row gutter={[6, 6]}>
+                      <Col xs={8} sm={8} md={4}>
+                        <Form.Item {...restField} name={[name, 'dvt']} label="ĐVT" style={{ marginBottom: 0 }}>
+                          <Input disabled size="small" style={{ textAlign: 'center' }} />
                         </Form.Item>
                       </Col>
-                      <Col xs={12} md={4}>
-                        <Form.Item {...restField} name={[name, 'net']} label="Net">
-                          <InputNumber disabled style={{ width: '100%' }} />
+                      <Col xs={8} sm={8} md={4}>
+                        <Form.Item {...restField} name={[name, 'net']} label="Net" style={{ marginBottom: 0 }}>
+                          <InputNumber disabled size="small" style={{ width: '100%' }} />
                         </Form.Item>
                       </Col>
-                      <Col xs={12} md={5}>
+                      <Col xs={8} sm={8} md={5}>
                         <Form.Item
                           {...restField}
                           name={[name, 'so_luong']}
-                          label={`SL Xuất (Gốc: ${originTon})`}
+                          label={`SL (Tồn: ${originTon})`}
                           rules={[{ required: true, message: 'Nhập SL' }]}
+                          style={{ marginBottom: 0 }}
                         >
                           <InputNumber 
+                            size="small"
                             min={1} 
                             style={{ width: '100%', fontWeight: 'bold' }} 
                             onChange={(val) => handleQuantityChange(val, name)} 
@@ -593,14 +601,14 @@ export default function ExportStock({ selectedUser, onBack }) {
                           />
                         </Form.Item>
                       </Col>
-                      <Col xs={12} md={5}>
-                        <Form.Item {...restField} name={[name, 'tong_net']} label="Tổng Net Xuất (Kg)">
-                          <InputNumber disabled style={{ width: '100%', fontWeight: 'bold', color: '#cf1322' }} />
+                      <Col xs={12} sm={12} md={5}>
+                        <Form.Item {...restField} name={[name, 'tong_net']} label="Tổng Net (Kg)" style={{ marginBottom: 0 }}>
+                          <InputNumber disabled size="small" style={{ width: '100%', fontWeight: 'bold', color: '#cf1322' }} />
                         </Form.Item>
                       </Col>
-                      <Col xs={24} md={6}>
-                        <Form.Item {...restField} name={[name, 'price']} label="Đơn giá xuất">
-                          <InputNumber min={0} style={{ width: '100%' }} />
+                      <Col xs={12} sm={12} md={6}>
+                        <Form.Item {...restField} name={[name, 'price']} label="Đơn giá" style={{ marginBottom: 0 }}>
+                          <InputNumber size="small" min={0} style={{ width: '100%' }} />
                         </Form.Item>
                       </Col>
                     </Row>
@@ -611,84 +619,83 @@ export default function ExportStock({ selectedUser, onBack }) {
           )}
         </Form.List>
 
-       {/* TỔNG KẾT VÀ NÚT LƯU */}
-<Card 
-  style={{ 
-    marginTop: 20, 
-    background: '#c9e8ae', 
-    borderColor: '#91caff', 
-    borderRadius: 8 
-  }}
->
-  <Flex vertical gap="middle">
-    {/* Danh sách gom nhóm từng sản phẩm */}
-    {groupedSummary.length > 0 && (
-      <Flex vertical gap="small" style={{ width: '100%' }}>
-        <Text strong style={{ color: '#0958d9', fontSize: 16 }}>
-          📋 Chi tiết hàng xuất theo phân loại:
-        </Text>
-        <Flex wrap="wrap" gap="small">
-          {groupedSummary.map((g, idx) => (
-            <Tag 
-              key={idx} 
-              color="blue" 
+        {/* TỔNG KẾT VÀ NÚT LƯU */}
+        <Card 
+          bodyStyle={{ padding: isMobile ? '10px' : '16px' }}
+          style={{ 
+            marginTop: 14, 
+            background: '#c9e8ae', 
+            borderColor: '#91caff', 
+            borderRadius: 8 
+          }}
+        >
+          <Flex vertical gap="small">
+            {groupedSummary.length > 0 && (
+              <Flex vertical gap="small" style={{ width: '100%' }}>
+                <Text strong style={{ color: '#0958d9', fontSize: isMobile ? 14 : 15 }}>
+                  📋 Chi tiết xuất theo phân loại:
+                </Text>
+                <Flex wrap="wrap" gap={4}>
+                  {groupedSummary.map((g, idx) => (
+                    <Tag 
+                      key={idx} 
+                      color="blue" 
+                      style={{ 
+                        fontSize: isMobile ? 12 : 14, 
+                        padding: '3px 8px', 
+                        borderRadius: 4,
+                        margin: 0
+                      }}
+                    >
+                      <b>{g.product_name}</b> {g.net > 0 ? `(${g.net}kg)` : ''}:{' '}
+                      <span style={{ color: '#cf1322', fontWeight: 'bold' }}>
+                        {g.total_sl.toLocaleString()} {g.dvt}
+                      </span>{' '}
+                      ({Math.round(g.total_kgs * 100) / 100} kg)
+                    </Tag>
+                  ))}
+                </Flex>
+              </Flex>
+            )}
+
+            <div style={{ textAlign: 'center', borderTop: '1px dashed #adc6ff', paddingTop: 8 }}>
+              <Title level={5} style={{ margin: 0, color: '#096dd9', fontSize: isMobile ? 14 : 16 }}>
+                Tổng xuất: {totalQty.toLocaleString()} Thùng | {Math.round(totalNet * 100) / 100} Kgs
+              </Title>
+            </div>
+
+            <Button 
+              type="primary" 
+              htmlType="submit" 
+              icon={<SaveOutlined />} 
+              loading={loading} 
+              block 
               style={{ 
+                height: 42, 
                 fontSize: 15, 
-                padding: '4px 10px', 
-                borderRadius: 4 
+                fontWeight: 'bold', 
+                background: '#388E3C' 
               }}
             >
-              <b>{g.product_name}</b> {g.net > 0 ? `(Net ${g.net})` : ''}:{' '}
-              <span style={{ color: '#cf1322', fontWeight: 'bold' }}>
-                {g.total_sl.toLocaleString()} {g.dvt}
-              </span>{' '}
-              ({Math.round(g.total_kgs * 100) / 100} kg)
-            </Tag>
-          ))}
-        </Flex>
-      </Flex>
-    )}
-
-    {/* Dòng tổng cộng chung */}
-    <div style={{ textAlign: 'center', borderTop: '1px dashed #adc6ff', paddingTop: 10 }}>
-      <Title level={4} style={{ margin: 0, color: '#096dd9' }}>
-        Tổng xuất: {totalQty.toLocaleString()} Thùng / Kiện | {Math.round(totalNet * 100) / 100} Kgs
-      </Title>
-    </div>
-
-    {/* Nút lưu */}
-    <Button 
-      type="primary" 
-      htmlType="submit" 
-      icon={<SaveOutlined />} 
-      loading={loading} 
-      block 
-      style={{ 
-        height: 48, 
-        fontSize: 16, 
-        fontWeight: 'bold', 
-        background: '#388E3C' 
-      }}
-    >
-      LƯU PHIẾU XUẤT KHO
-    </Button>
-  </Flex>
-</Card>
+              LƯU PHIẾU XUẤT KHO
+            </Button>
+          </Flex>
+        </Card>
       </Form>
 
       {/* MODAL CHỌN TỒN KHO */}
       <Modal
-        title="CHỌN HÀNG TỪ TỒN KHO KHẢ DỤNG (> 0)"
+        title="CHỌN HÀNG TỪ TỒN KHO"
         open={isModalOpen}
         onCancel={() => setIsModalOpen(false)}
         onOk={handleAddSelectedStockToForm}
-        okText={`Thêm (${selectedRowKeys.length}) dòng vào phiếu`}
+        okText={`Thêm (${selectedRowKeys.length}) dòng`}
         cancelText="Đóng"
-        width={950}
+        width={isMobile ? '95%' : 900}
       >
-        <Flex vertical gap="middle" style={{ marginTop: 10 }}>
+        <Flex vertical gap="small" style={{ marginTop: 8 }}>
           <Input 
-            placeholder="Tìm theo tên sản phẩm, chủ hàng (NCC), vị trí..." 
+            placeholder="Tìm theo tên sản phẩm, chủ hàng, vị trí..." 
             prefix={<SearchOutlined />} 
             value={stockSearchText}
             onChange={(e) => setStockSearchText(e.target.value)}
@@ -700,6 +707,7 @@ export default function ExportStock({ selectedUser, onBack }) {
             loading={loadingStock}
             dataSource={filteredAvailableStock}
             columns={stockColumns}
+            scroll={{ x: 650 }}
             rowSelection={{
               type: 'checkbox',
               selectedRowKeys: selectedRowKeys,
@@ -711,24 +719,24 @@ export default function ExportStock({ selectedUser, onBack }) {
                 disabled: existingStockUuids.includes(record.stock_uuid),
               }),
             }}
-            pagination={{ pageSize: 6 }}
+            pagination={{ pageSize: 5 }}
             size="small"
           />
         </Flex>
       </Modal>
 
-      {/* KẾT QUẢ VỪA XUẤT & BỘ NÚT IN/XUẤT FILE */}
+      {/* KẾT QUẢ VỪA XUẤT */}
       {savedData && (
-        <Card style={{ marginTop: 20, background: '#f6ffed', borderColor: '#b7eb8f', borderRadius: 8 }}>
-          <Flex vertical gap="middle">
+        <Card style={{ marginTop: 16, background: '#f6ffed', borderColor: '#b7eb8f', borderRadius: 8 }}>
+          <Flex vertical gap="small">
             <Alert
               message={`✅ Đã xuất kho thành công phiếu #${savedData.soPhieu} (${savedData.items.length} dòng hàng)`}
               type="success"
               showIcon
             />
             
-            <Card size="small" title="Tùy chọn in & Xuất file phiếu xuất vừa tạo" style={{ background: '#fff' }}>
-              <Row gutter={[12, 12]}>
+            <Card size="small" title="Tùy chọn in & Xuất file" style={{ background: '#fff' }}>
+              <Row gutter={[8, 8]}>
                 <Col xs={24} sm={8}>
                   <Button 
                     type="primary" 
@@ -737,40 +745,40 @@ export default function ExportStock({ selectedUser, onBack }) {
                     block 
                     onClick={() => exportPdfPhieuXuat({ ...savedData, isSave: true })}
                   >
-                    Xuất PDF Phiếu Xuất
+                    Xuất PDF
                   </Button>
                 </Col>
-                <Col xs={24} sm={8}>
+                <Col xs={12} sm={8}>
                   <Button 
                     style={{ background: '#388E3C', color: '#fff' }} 
                     icon={<FileExcelOutlined />} 
                     block 
                     onClick={() => exportExcelPhieuXuat(savedData)}
                   >
-                    Xuất Excel (.xlsx)
+                    Xuất Excel
                   </Button>
                 </Col>
-                <Col xs={24} sm={8}>
+                <Col xs={12} sm={8}>
                   <Button 
                     icon={<PrinterOutlined />} 
                     block 
                     onClick={() => exportPdfPhieuXuat({ ...savedData, isSave: false })}
                   >
-                    In Phiếu Tạm (Review)
+                    In Phiếu
                   </Button>
                 </Col>
               </Row>
             </Card>
 
-            <Row gutter={12}>
+            <Row gutter={[8, 8]}>
               <Col span={12}>
                 <Button icon={<RedoOutlined />} onClick={handleClearForm} block>
-                  Tạo Phiếu Xuất Mới
+                  Tạo Phiếu Mới
                 </Button>
               </Col>
               <Col span={12}>
                 <Button type="primary" icon={<HistoryOutlined />} onClick={onBack} block style={{ background: '#1890ff' }}>
-                  📊 Xem Lịch Sử
+                  Xem Lịch Sử
                 </Button>
               </Col>
             </Row>
