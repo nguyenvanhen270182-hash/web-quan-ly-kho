@@ -621,14 +621,14 @@ export default function ExportStock({ selectedUser, onBack }) {
 
         {/* TỔNG KẾT VÀ NÚT LƯU */}
         <Card 
-          bodyStyle={{ padding: isMobile ? '10px' : '16px' }}
-          style={{ 
-            marginTop: 14, 
-            background: '#c9e8ae', 
-            borderColor: '#91caff', 
-            borderRadius: 8 
-          }}
-        >
+              bodyStyle={{ padding: isMobile ? '10px' : '16px' }}
+              style={{ 
+                marginTop: 14, 
+                background: '#c9e8ae', 
+                borderColor: '#91caff', 
+                borderRadius: 8 
+              }}
+            >
           <Flex vertical gap="small">
             {groupedSummary.length > 0 && (
               <Flex vertical gap="small" style={{ width: '100%' }}>
