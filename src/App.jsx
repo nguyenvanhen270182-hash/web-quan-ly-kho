@@ -55,7 +55,8 @@ export default function App() {
   const [selectedStockItem, setSelectedStockItem] = useState(null);
   const [adjustLoading, setAdjustLoading] = useState(false);
   const [form] = Form.useForm();
-
+  // State ẩn/hiện bộ lọc chi tiết (mặc định ẩn)
+  const [showFilters, setShowFilters] = useState(false);
   // Theo dõi giá trị form để hiển thị trực quan số lượng dự kiến
   const watchAdjustType = Form.useWatch('adjust_type', form);
   const watchQuantity = Form.useWatch('quantity', form);
@@ -698,6 +699,13 @@ export default function App() {
                   </Flex>
 
                   <Button 
+                    type={showFilters ? "primary" : "default"}
+                    onClick={() => setShowFilters(!showFilters)}
+                    style={{ width: isMobile ? '100%' : 'auto' }}
+                  >
+                    {showFilters ? '🔍 Thu gọn bộ lọc 🛈' : '🔍 Lọc chi tiết...'}
+                  </Button>
+                  <Button 
                     icon={<ReloadOutlined />} 
                     onClick={handleResetFilters} 
                     loading={loading}
@@ -708,108 +716,111 @@ export default function App() {
                 </Flex>
 
                 {/* BỘ LỌC CHI TIẾT TRONG KHUNG TRẮNG */}
-                <Card size="small" bodyStyle={{ padding: isMobile ? '8px' : '12px' }} style={{ background: '#ffffff', borderRadius: '6px' }}>
-                  <Row gutter={[8, 8]}>
-                    <Col xs={24} sm={12} md={6}>
-                      <AutoComplete
-                        allowClear
-                        placeholder="🔍 Nhập hoặc chọn Sản Phẩm..." 
-                        style={{ width: '100%' }}
-                        value={searchProduct}
-                        onChange={(val) => setSearchProduct(val)}
-                        onSelect={(val) => setSearchProduct(val)}
-                        onSearch={(val) => setSearchProduct(val)}
-                        options={distinctOptions.products}
-                        filterOption={(inputValue, option) =>
-                          (option?.value ?? '').toLowerCase().includes((inputValue || '').toLowerCase())
-                        }
-                      />
-                    </Col>
+                {/* NÚT VÀ KHUNG BỘ LỌC CHI TIẾT */}
+                {showFilters && (
+                  <Card size="small" bodyStyle={{ padding: isMobile ? '8px' : '12px' }} style={{ background: '#ffffff', borderRadius: '6px', marginTop: '8px' }}>
+                    <Row gutter={[8, 8]}>
+                      <Col xs={24} sm={12} md={6}>
+                        <AutoComplete
+                          allowClear
+                          placeholder="🔍 Nhập hoặc chọn Sản Phẩm..." 
+                          style={{ width: '100%' }}
+                          value={searchProduct}
+                          onChange={(val) => setSearchProduct(val)}
+                          onSelect={(val) => setSearchProduct(val)}
+                          onSearch={(val) => setSearchProduct(val)}
+                          options={distinctOptions.products}
+                          filterOption={(inputValue, option) =>
+                            (option?.value ?? '').toLowerCase().includes((inputValue || '').toLowerCase())
+                          }
+                        />
+                      </Col>
 
-                    <Col xs={24} sm={12} md={6}>
-                      <Select 
-                        showSearch
-                        allowClear
-                        placeholder="🏢 Chọn Khách hàng..." 
-                        style={{ width: '100%' }}
-                        value={searchCustomer}
-                        onChange={setSearchCustomer}
-                        options={distinctOptions.customers}
-                        filterOption={(input, option) =>
-                          (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-                        }
-                      />
-                    </Col>
-
-                    <Col xs={24} sm={12} md={6}>
-                      <Select 
-                        showSearch
-                        allowClear
-                        placeholder="📍 Chọn Vị trí kho..." 
-                        style={{ width: '100%' }}
-                        value={searchPosition}
-                        onChange={setSearchPosition}
-                        options={distinctOptions.positions}
-                        filterOption={(input, option) =>
-                          (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-                        }
-                      />
-                    </Col>
-
-                    <Col xs={24} sm={12} md={6}>
-                      <Select 
-                        showSearch
-                        allowClear
-                        placeholder="🚚 Chọn Biển số xe..." 
-                        style={{ width: '100%' }}
-                        value={searchVehicle}
-                        onChange={setSearchVehicle}
-                        options={distinctOptions.vehicles}
-                        filterOption={(input, option) =>
-                          (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-                        }
-                      />
-                    </Col>
-
-                    {(filterType === 'OUT' || filterType === 'ALL' || filterType === 'ADJUST_OUT') && (
                       <Col xs={24} sm={12} md={6}>
                         <Select 
                           showSearch
                           allowClear
-                          placeholder="👤 Chọn Người nhận..." 
+                          placeholder="🏢 Chọn Khách hàng..." 
                           style={{ width: '100%' }}
-                          value={searchReceiver}
-                          onChange={setSearchReceiver}
-                          options={distinctOptions.receivers}
+                          value={searchCustomer}
+                          onChange={setSearchCustomer}
+                          options={distinctOptions.customers}
                           filterOption={(input, option) =>
                             (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
                           }
                         />
                       </Col>
-                    )}
 
-                    <Col xs={24} sm={12} md={6}>
-                      <Select 
-                        showSearch
-                        allowClear
-                        placeholder={
-                          filterType === 'OUT' 
-                            ? '📄 Số phiếu xuất...' 
-                            : filterType === 'IN' 
-                            ? '📄 Số phiếu nhập...' 
-                            : '📄 Số phiếu...'
-                        } 
-                        style={{ width: '100%' }}
-                        value={searchTicket}
-                        onChange={setSearchTicket}
-                        options={distinctOptions.tickets}
-                        filterOption={(input, option) =>
-                          (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-                        }
-                      />
-                    </Col>
-                  </Row>
-                </Card>
+                      <Col xs={24} sm={12} md={6}>
+                        <Select 
+                          showSearch
+                          allowClear
+                          placeholder="📍 Chọn Vị trí kho..." 
+                          style={{ width: '100%' }}
+                          value={searchPosition}
+                          onChange={setSearchPosition}
+                          options={distinctOptions.positions}
+                          filterOption={(input, option) =>
+                            (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                          }
+                        />
+                      </Col>
+
+                      <Col xs={24} sm={12} md={6}>
+                        <Select 
+                          showSearch
+                          allowClear
+                          placeholder="🚚 Chọn Biển số xe..." 
+                          style={{ width: '100%' }}
+                          value={searchVehicle}
+                          onChange={setSearchVehicle}
+                          options={distinctOptions.vehicles}
+                          filterOption={(input, option) =>
+                            (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                          }
+                        />
+                      </Col>
+
+                      {(filterType === 'OUT' || filterType === 'ALL' || filterType === 'ADJUST_OUT') && (
+                        <Col xs={24} sm={12} md={6}>
+                          <Select 
+                            showSearch
+                            allowClear
+                            placeholder="👤 Chọn Người nhận..." 
+                            style={{ width: '100%' }}
+                            value={searchReceiver}
+                            onChange={setSearchReceiver}
+                            options={distinctOptions.receivers}
+                            filterOption={(input, option) =>
+                              (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                            }
+                          />
+                        </Col>
+                      )}
+
+                      <Col xs={24} sm={12} md={6}>
+                        <Select 
+                          showSearch
+                          allowClear
+                          placeholder={
+                            filterType === 'OUT' 
+                              ? '📄 Số phiếu xuất...' 
+                              : filterType === 'IN' 
+                              ? '📄 Số phiếu nhập...' 
+                              : '📄 Số phiếu...'
+                          } 
+                          style={{ width: '100%' }}
+                          value={searchTicket}
+                          onChange={setSearchTicket}
+                          options={distinctOptions.tickets}
+                          filterOption={(input, option) =>
+                            (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                          }
+                        />
+                      </Col>
+                    </Row>
+                  </Card>
+                )}
 
                 {/* BẢNG DỮ LIỆU */}
                 <Table 
