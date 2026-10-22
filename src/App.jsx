@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { 
   Layout, Table, Select, Button, Card, Space, 
   message, Tag, Flex, Typography, DatePicker, Row, Col, Tooltip,
-  Modal, Form, InputNumber, Input, Radio, Grid 
+  Modal, Form, InputNumber, Input, Radio, Grid, AutoComplete 
 } from 'antd';
 import { 
   ReloadOutlined, ArrowUpOutlined, 
@@ -297,6 +297,18 @@ export default function App() {
       return current.isBetween(start, end, null, '[]');
     };
 
+    const checkProductMatch = (prodName) => {
+      if (!searchProduct) return true;
+      const current = (prodName || '').trim().toLowerCase();
+      const keyword = searchProduct.trim().toLowerCase();
+
+      const isExactChosen = distinctOptions.products?.some(
+        (p) => (p.value || '').trim().toLowerCase() === keyword
+      );
+
+      return isExactChosen ? current === keyword : current.includes(keyword);
+    };
+
     if (filterType === 'STOCK') {
       const stockMap = new Map();
 
@@ -362,7 +374,7 @@ export default function App() {
       });
 
       return listStock.filter((item) => {
-        const matchProduct = !searchProduct || item.product_name === searchProduct;
+        const matchProduct = checkProductMatch(item.product_name);
         const matchCustomer = !searchCustomer || item.customer_name === searchCustomer;
         const matchPosition = !searchPosition || item.position_name === searchPosition;
         const matchVehicle = !searchVehicle || item.note?.includes(searchVehicle);
@@ -388,7 +400,7 @@ export default function App() {
       }
 
       const matchDate = checkDateInRange(item.date);
-      const matchProduct = !searchProduct || item.product_name === searchProduct;
+      const matchProduct = checkProductMatch(item.product_name);
       const matchCustomer = !searchCustomer || item.customer_name === searchCustomer;
       const matchReceiver = !searchReceiver || item.receiver_name === searchReceiver;
       const matchPosition = !searchPosition || item.position_name === searchPosition;
@@ -406,33 +418,42 @@ export default function App() {
     searchReceiver, 
     searchPosition, 
     searchVehicle, 
-    searchTicket
+    searchTicket,
+    distinctOptions.products
   ]);
 
   // =========================================================================
-  // TÍNH TOÁN TỔNG SỐ LƯỢNG & TỔNG TIỀN
+  // TÍNH TOÁN TỔNG SỐ LƯỢNG, TỔNG NET & TỔNG TIỀN (ĐÃ FIX LỖI TRẮNG TRANG)
   // =========================================================================
   const summaryStats = useMemo(() => {
     let totalQty = 0;
+    let totalNetWeight = 0;
     let totalPrice = 0;
 
     filteredTransactions.forEach((item) => {
       const t = (item.type || '').toUpperCase();
       const qty = Number(item.so_luong) || 0;
+      const net = Number(item.net) || 1;
       const price = Number(item.price) || 0;
+      
+      const lineTotal = qty * net * price;
+      const lineNet = qty * net;
 
       if (t === 'ADJUST_OUT') {
         totalQty -= qty;
-        totalPrice -= qty * price;
+        totalNetWeight -= lineNet;
+        totalPrice -= lineTotal;
       } else {
         totalQty += qty;
-        totalPrice += qty * price;
+        totalNetWeight += lineNet;
+        totalPrice += lineTotal;
       }
     });
 
     return {
       totalRows: filteredTransactions.length,
       totalQty,
+      totalNetWeight: Math.round(totalNetWeight * 100) / 100,
       totalPrice,
     };
   }, [filteredTransactions]);
@@ -690,16 +711,17 @@ export default function App() {
                 <Card size="small" bodyStyle={{ padding: isMobile ? '8px' : '12px' }} style={{ background: '#ffffff', borderRadius: '6px' }}>
                   <Row gutter={[8, 8]}>
                     <Col xs={24} sm={12} md={6}>
-                      <Select 
-                        showSearch
+                      <AutoComplete
                         allowClear
-                        placeholder="🔍 Chọn Sản Phẩm..." 
+                        placeholder="🔍 Nhập hoặc chọn Sản Phẩm..." 
                         style={{ width: '100%' }}
                         value={searchProduct}
-                        onChange={setSearchProduct}
+                        onChange={(val) => setSearchProduct(val)}
+                        onSelect={(val) => setSearchProduct(val)}
+                        onSearch={(val) => setSearchProduct(val)}
                         options={distinctOptions.products}
-                        filterOption={(input, option) =>
-                          (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                        filterOption={(inputValue, option) =>
+                          (option?.value ?? '').toLowerCase().includes((inputValue || '').toLowerCase())
                         }
                       />
                     </Col>
@@ -820,6 +842,56 @@ export default function App() {
               </Flex>
             </Card>
 
+            {/* TIẾN ĐỘ GOM ĐỦ CONT (MỤC TIÊU: 2.800 THÙNG) */}
+            <Card 
+              size="small" 
+              style={{ 
+                background: '#002329', 
+                border: '1px solid #13c2c2', 
+                borderRadius: '8px', 
+                marginBottom: '8px' 
+              }}
+            >
+              <Flex justify="space-between" align="center" wrap="wrap" gap="small">
+                <div>
+                  <span style={{ color: '#87e8de', fontSize: isMobile ? 12 : 13 }}>
+                    🚢 Tiến độ Cont (Mục tiêu: 2.800 thùng):
+                  </span>
+                  <div style={{ color: '#fff', fontSize: isMobile ? 15 : 17, fontWeight: 'bold' }}>
+                    Đã gom: <span style={{ color: '#52c41a' }}>{summaryStats.totalQty.toLocaleString()}</span> / 2.800 thùng
+                    <span style={{ fontSize: 13, color: '#13c2c2', marginLeft: 8 }}>
+                      ({(summaryStats.totalNetWeight || 0).toLocaleString()} kg Net)
+                    </span>
+                  </div>
+                </div>
+
+                <div style={{ textAlign: isMobile ? 'left' : 'right' }}>
+                  <span style={{ color: '#ffccc7', fontSize: isMobile ? 12 : 13 }}>Còn thiếu để đủ cont:</span>
+                  <div style={{ color: '#ff4d4f', fontSize: isMobile ? 16 : 18, fontWeight: 'bold' }}>
+                    {Math.max(0, 2800 - summaryStats.totalQty).toLocaleString()} thùng
+                    <span style={{ fontSize: 13, color: '#faad14', marginLeft: 6 }}>
+                      (~{Math.max(0, Math.round((2800 - summaryStats.totalQty) * 8.8)).toLocaleString()} kg)
+                    </span>
+                  </div>
+                </div>
+              </Flex>
+
+              {/* Thanh phần trăm tiến độ */}
+              <div style={{ marginTop: 8, background: '#00474f', borderRadius: 4, height: 8, overflow: 'hidden' }}>
+                <div 
+                  style={{ 
+                    width: `${Math.min(100, Math.round((summaryStats.totalQty / 2800) * 100))}%`, 
+                    background: summaryStats.totalQty >= 2800 ? '#52c41a' : '#13c2c2', 
+                    height: '100%',
+                    transition: 'width 0.3s ease'
+                  }} 
+                />
+              </div>
+              <div style={{ textAlign: 'right', color: '#87e8de', fontSize: 11, marginTop: 4 }}>
+                Đạt {Math.round((summaryStats.totalQty / 2800) * 100)}% cont
+              </div>
+            </Card>
+
             {/* THỐNG KÊ TỔNG QUAN */}
             <Card 
               size="small" 
@@ -841,6 +913,13 @@ export default function App() {
                   <span style={{ color: '#595959', fontSize: isMobile ? 12 : 14 }}>📦 Tổng số lượng: </span>
                   <b style={{ fontSize: isMobile ? '15px' : '18px', color: '#52c41a' }}>
                     {summaryStats.totalQty.toLocaleString()}
+                  </b>
+                </div>
+
+                <div>
+                  <span style={{ color: '#595959', fontSize: isMobile ? 12 : 14 }}>⚖️ Tổng Net: </span>
+                  <b style={{ fontSize: isMobile ? '15px' : '18px', color: '#13c2c2' }}>
+                    {(summaryStats.totalNetWeight || 0).toLocaleString()} kg
                   </b>
                 </div>
 

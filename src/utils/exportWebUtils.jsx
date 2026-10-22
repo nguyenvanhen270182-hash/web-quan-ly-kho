@@ -10,21 +10,30 @@ export const printReportHistory = ({ filterType, dateRange, transactions, filter
   }
 
   let totalQty = 0;
+  let totalNetWeight = 0;
   let totalPrice = 0;
 
   const rowsHtml = filteredData.map((item, index) => {
     const t = (item.type || '').toUpperCase();
     const qty = Number(item.so_luong) || 0;
+    const net = Number(item.net) || 1;
     const price = Number(item.price) || 0;
+    const tongNet = Math.round(qty * net * 100) / 100;
+    const lineAmount = qty * net * price;
 
     let displayQty = qty;
+    let displayTongNet = tongNet;
+
     if (t === 'ADJUST_OUT') {
       displayQty = -qty;
+      displayTongNet = -tongNet;
       totalQty -= qty;
-      totalPrice -= (qty * price);
+      totalNetWeight -= tongNet;
+      totalPrice -= lineAmount;
     } else {
       totalQty += qty;
-      totalPrice += (qty * price);
+      totalNetWeight += tongNet;
+      totalPrice += lineAmount;
     }
 
     let typeLabel = item.type;
@@ -46,8 +55,12 @@ export const printReportHistory = ({ filterType, dateRange, transactions, filter
         <td style="text-align: right; font-weight: bold; ${t === 'ADJUST_OUT' ? 'color: #d4380d;' : ''}">
           ${displayQty > 0 && t === 'ADJUST_IN' ? '+' : ''}${displayQty.toLocaleString()} ${item.dvt ? `(${item.dvt})` : ''}
         </td>
+        <td style="text-align: right;">${net > 0 ? net.toLocaleString() : '-'}</td>
+        <td style="text-align: right; font-weight: bold; color: #13c2c2;">${displayTongNet !== 0 ? displayTongNet.toLocaleString() : '-'}</td>
         <td style="text-align: right;">${price > 0 ? price.toLocaleString() + ' đ' : '-'}</td>
-        <td style="text-align: right; font-weight: bold;">${price > 0 ? (displayQty * price).toLocaleString() + ' đ' : '-'}</td>
+        <td style="text-align: right; font-weight: bold; ${t === 'ADJUST_OUT' ? 'color: #d4380d;' : ''}">
+          ${lineAmount > 0 ? (t === 'ADJUST_OUT' ? '-' : '') + lineAmount.toLocaleString() + ' đ' : '-'}
+        </td>
         <td>${item.note || ''}</td>
       </tr>
     `;
@@ -59,8 +72,8 @@ export const printReportHistory = ({ filterType, dateRange, transactions, filter
   else if (filterType === 'STOCK') reportTitle = 'BÁO CÁO TỒN KHO THỰC TẾ';
 
   const dateRangeStr = dateRange && dateRange[0] && dateRange[1] 
-    ? `Từ ngày: ${dayjs(dateRange[0]).format('YYYY-MM-DD')} - Đến ngày: ${dayjs(dateRange[1]).format('YYYY-MM-DD')}`
-    : `Thời gian in: ${new Date().toLocaleDateString('vi-VN')}`;
+    ? `Từ ngày: <b>${dayjs(dateRange[0]).format('YYYY-MM-DD')}</b> &nbsp;&nbsp;|&nbsp;&nbsp; Đến ngày: <b>${dayjs(dateRange[1]).format('YYYY-MM-DD')}</b>`
+    : `Thời gian in: <b>${dayjs().format('YYYY-MM-DD HH:mm')}</b>`;
 
   const printWindow = window.open('', '_blank');
   printWindow.document.write(`
@@ -72,7 +85,7 @@ export const printReportHistory = ({ filterType, dateRange, transactions, filter
           .header { text-align: center; margin-bottom: 20px; }
           .header h2 { margin: 0 0 5px 0; text-transform: uppercase; color: #1f1f1f; }
           table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-          th, td { border: 1px solid #ccc; padding: 6px 8px; font-size: 12px; }
+          th, td { border: 1px solid #ccc; padding: 6px 7px; font-size: 11.5px; }
           th { background-color: #f2f2f2; text-align: center; }
           @media print { body { padding: 0; } }
         </style>
@@ -85,25 +98,29 @@ export const printReportHistory = ({ filterType, dateRange, transactions, filter
         <table>
           <thead>
             <tr>
-              <th style="width: 35px;">TT</th>
-              <th style="width: 80px;">Ngày</th>
-              <th style="width: 80px;">Số Phiếu</th>
-              <th style="width: 75px;">Loại</th>
+              <th style="width: 30px;">TT</th>
+              <th style="width: 75px;">Ngày</th>
+              <th style="width: 75px;">Số Phiếu</th>
+              <th style="width: 65px;">Loại</th>
               <th>Tên Sản Phẩm</th>
               <th>Đối tác / Vị trí</th>
-              <th style="width: 95px;">Số Lượng</th>
-              <th style="width: 80px;">Đơn Giá</th>
-              <th style="width: 100px;">Thành Tiền</th>
+              <th style="width: 80px;">Số Lượng</th>
+              <th style="width: 55px;">Net (kg)</th>
+              <th style="width: 80px;">Tổng Net (kg)</th>
+              <th style="width: 75px;">Đơn Giá</th>
+              <th style="width: 95px;">Thành Tiền</th>
               <th>Ghi Chú</th>
             </tr>
           </thead>
           <tbody>${rowsHtml}</tbody>
           <tfoot>
             <tr style="background-color: #fafafa; font-weight: bold;">
-              <td colspan="6" style="text-align: right; padding-right: 15px;">TỔNG CỘNG THỰC TẾ:</td>
-              <td style="text-align: right; color: #d4380d; font-size: 13px;">${totalQty.toLocaleString()}</td>
+              <td colspan="6" style="text-align: right; padding-right: 10px;">TỔNG CỘNG THỰC TẾ:</td>
+              <td style="text-align: right; color: #389e0d; font-size: 12px;">${totalQty.toLocaleString()}</td>
               <td></td>
-              <td style="text-align: right; color: #d4380d; font-size: 13px;">${totalPrice.toLocaleString()} đ</td>
+              <td style="text-align: right; color: #13c2c2; font-size: 12px;">${Math.round(totalNetWeight * 100) / 100} kg</td>
+              <td></td>
+              <td style="text-align: right; color: #d4380d; font-size: 12px;">${totalPrice.toLocaleString()} đ</td>
               <td></td>
             </tr>
           </tfoot>
@@ -130,14 +147,18 @@ export const exportExcelReportHistory = ({ filterType, filteredData }) => {
   }
 
   let csvContent = '\uFEFF';
-  csvContent += 'STT,Ngày,Số Phiếu,Loại,Tên Sản Phẩm,Đối Tác / Vị Trí,Số Lượng,ĐVT,Đơn Giá,Thành Tiền,Ghi Chú\n';
+  csvContent += 'STT,Ngày,Số Phiếu,Loại,Tên Sản Phẩm,Đối Tác / Vị Trí,Số Lượng,ĐVT,Net (kg),Tổng Net (kg),Đơn Giá,Thành Tiền,Ghi Chú\n';
 
   filteredData.forEach((item, index) => {
     const t = (item.type || '').toUpperCase();
     const qty = Number(item.so_luong) || 0;
+    const net = Number(item.net) || 1;
     const price = Number(item.price) || 0;
-    const finalQty = t === 'ADJUST_OUT' ? -qty : qty;
-    const totalAmount = finalQty * price;
+    const isAdjustOut = t === 'ADJUST_OUT';
+    
+    const finalQty = isAdjustOut ? -qty : qty;
+    const finalTongNet = Math.round(finalQty * net * 100) / 100;
+    const totalAmount = finalQty * net * price;
 
     const row = [
       index + 1,
@@ -147,7 +168,9 @@ export const exportExcelReportHistory = ({ filterType, filteredData }) => {
       `"${(item.product_name || '').replace(/"/g, '""')}"`,
       `"${(item.position_name || item.customer_name || item.receiver_name || '').replace(/"/g, '""')}"`,
       finalQty,
-      `"${item.dvt || ''}"`,
+      `"${item.dvt || 'Thùng'}"`,
+      net,
+      finalTongNet,
       price,
       totalAmount,
       `"${(item.note || '').replace(/"/g, '""')}"`,
@@ -175,22 +198,29 @@ export const printPhieuNhap = (ticketInfo, items) => {
   }
 
   let totalQty = 0;
+  let totalNetWeight = 0;
   let totalPrice = 0;
 
   const rowsHtml = items.map((item, index) => {
     const qty = Number(item.so_luong) || 0;
+    const net = Number(item.net) || 1;
     const price = Number(item.price) || 0;
-    const amount = qty * price;
+    const tongNet = Math.round(qty * net * 100) / 100;
+    const amount = qty * net * price;
+
     totalQty += qty;
+    totalNetWeight += tongNet;
     totalPrice += amount;
 
     return `
       <tr>
         <td style="text-align: center;">${index + 1}</td>
         <td><b>${item.product_name || ''}</b></td>
-        <td style="text-align: center;">${item.dvt || ''}</td>
+        <td style="text-align: center;">${item.dvt || 'Thùng'}</td>
         <td style="text-align: center;">${item.position_name || item.pos || '-'}</td>
         <td style="text-align: right; font-weight: bold;">${qty.toLocaleString()}</td>
+        <td style="text-align: right;">${net > 0 ? net.toLocaleString() : '-'}</td>
+        <td style="text-align: right; font-weight: bold; color: #13c2c2;">${tongNet > 0 ? tongNet.toLocaleString() : '-'}</td>
         <td style="text-align: right;">${price > 0 ? price.toLocaleString() + ' đ' : '-'}</td>
         <td style="text-align: right; font-weight: bold;">${amount > 0 ? amount.toLocaleString() + ' đ' : '-'}</td>
         <td>${item.note || ''}</td>
@@ -217,7 +247,7 @@ export const printPhieuNhap = (ticketInfo, items) => {
       <body>
         <div class="header">
           <h2>PHIẾU NHẬP KHO</h2>
-          <div>Số phiếu: <b>${ticketInfo?.so_phieu || ''}</b> | Ngày: ${ticketInfo?.date || dayjs().format('YYYY-MM-DD')}</div>
+          <div>Số phiếu: <b>${ticketInfo?.so_phieu || ''}</b> | Ngày: <b>${ticketInfo?.date || dayjs().format('YYYY-MM-DD')}</b></div>
         </div>
         <div class="meta">
           <div>Nhà cung cấp / Đối tác: <b>${ticketInfo?.customer_name || 'Khách lẻ'}</b></div>
@@ -229,10 +259,12 @@ export const printPhieuNhap = (ticketInfo, items) => {
               <th style="width: 35px;">STT</th>
               <th>Tên Hàng Hóa / Sản Phẩm</th>
               <th style="width: 60px;">ĐVT</th>
-              <th style="width: 90px;">Vị Trí</th>
-              <th style="width: 90px;">Số Lượng</th>
-              <th style="width: 90px;">Đơn Giá</th>
-              <th style="width: 110px;">Thành Tiền</th>
+              <th style="width: 80px;">Vị Trí</th>
+              <th style="width: 80px;">Số Lượng</th>
+              <th style="width: 60px;">Net (kg)</th>
+              <th style="width: 85px;">Tổng Net (kg)</th>
+              <th style="width: 80px;">Đơn Giá</th>
+              <th style="width: 105px;">Thành Tiền</th>
               <th>Ghi Chú</th>
             </tr>
           </thead>
@@ -241,6 +273,8 @@ export const printPhieuNhap = (ticketInfo, items) => {
             <tr style="font-weight: bold; background-color: #fafafa;">
               <td colspan="4" style="text-align: right;">TỔNG CỘNG:</td>
               <td style="text-align: right; color: #389e0d;">${totalQty.toLocaleString()}</td>
+              <td></td>
+              <td style="text-align: right; color: #13c2c2;">${Math.round(totalNetWeight * 100) / 100} kg</td>
               <td></td>
               <td style="text-align: right; color: #d4380d;">${totalPrice.toLocaleString()} đ</td>
               <td></td>
@@ -270,20 +304,26 @@ export const exportExcelPhieuNhap = (ticketInfo, items) => {
 
   let csvContent = '\uFEFF';
   csvContent += `PHIẾU NHẬP KHO: ${ticketInfo?.so_phieu || ''}\n`;
-  csvContent += `Ngày: ${ticketInfo?.date || ''} - Đối tác: ${ticketInfo?.customer_name || ''}\n\n`;
-  csvContent += 'STT,Tên Sản Phẩm,ĐVT,Vị Trí,Số Lượng,Đơn Giá,Thành Tiền,Ghi Chú\n';
+  csvContent += `Ngày: ${ticketInfo?.date || ''} | Đối tác: ${ticketInfo?.customer_name || ''} | Xe: ${ticketInfo?.vehicle || '-'}\n\n`;
+  csvContent += 'STT,Tên Sản Phẩm,ĐVT,Vị Trí,Số Lượng,Net (kg),Tổng Net (kg),Đơn Giá,Thành Tiền,Ghi Chú\n';
 
   items.forEach((item, index) => {
     const qty = Number(item.so_luong) || 0;
+    const net = Number(item.net) || 1;
     const price = Number(item.price) || 0;
+    const tongNet = Math.round(qty * net * 100) / 100;
+    const totalAmount = qty * net * price;
+
     const row = [
       index + 1,
       `"${(item.product_name || '').replace(/"/g, '""')}"`,
-      `"${item.dvt || ''}"`,
+      `"${item.dvt || 'Thùng'}"`,
       `"${(item.position_name || item.pos || '').replace(/"/g, '""')}"`,
       qty,
+      net,
+      tongNet,
       price,
-      qty * price,
+      totalAmount,
       `"${(item.note || '').replace(/"/g, '""')}"`,
     ];
     csvContent += row.join(',') + '\n';
@@ -309,22 +349,29 @@ export const printPhieuXuat = (ticketInfo, items) => {
   }
 
   let totalQty = 0;
+  let totalNetWeight = 0;
   let totalPrice = 0;
 
   const rowsHtml = items.map((item, index) => {
     const qty = Number(item.so_luong) || 0;
+    const net = Number(item.net) || 1;
     const price = Number(item.price) || 0;
-    const amount = qty * price;
+    const tongNet = Math.round(qty * net * 100) / 100;
+    const amount = qty * net * price;
+
     totalQty += qty;
+    totalNetWeight += tongNet;
     totalPrice += amount;
 
     return `
       <tr>
         <td style="text-align: center;">${index + 1}</td>
         <td><b>${item.product_name || ''}</b></td>
-        <td style="text-align: center;">${item.dvt || ''}</td>
+        <td style="text-align: center;">${item.dvt || 'Thùng'}</td>
         <td style="text-align: center;">${item.position_name || item.pos || '-'}</td>
         <td style="text-align: right; font-weight: bold;">${qty.toLocaleString()}</td>
+        <td style="text-align: right;">${net > 0 ? net.toLocaleString() : '-'}</td>
+        <td style="text-align: right; font-weight: bold; color: #13c2c2;">${tongNet > 0 ? tongNet.toLocaleString() : '-'}</td>
         <td style="text-align: right;">${price > 0 ? price.toLocaleString() + ' đ' : '-'}</td>
         <td style="text-align: right; font-weight: bold;">${amount > 0 ? amount.toLocaleString() + ' đ' : '-'}</td>
         <td>${item.note || ''}</td>
@@ -351,7 +398,7 @@ export const printPhieuXuat = (ticketInfo, items) => {
       <body>
         <div class="header">
           <h2>PHIẾU XUẤT KHO</h2>
-          <div>Số phiếu: <b>${ticketInfo?.so_phieu || ''}</b> | Ngày: ${ticketInfo?.date || dayjs().format('YYYY-MM-DD')}</div>
+          <div>Số phiếu: <b>${ticketInfo?.so_phieu || ''}</b> | Ngày: <b>${ticketInfo?.date || dayjs().format('YYYY-MM-DD')}</b></div>
         </div>
         <div class="meta">
           <div>Người / Đơn vị nhận: <b>${ticketInfo?.receiver_name || ticketInfo?.customer_name || 'Khách lẻ'}</b></div>
@@ -363,10 +410,12 @@ export const printPhieuXuat = (ticketInfo, items) => {
               <th style="width: 35px;">STT</th>
               <th>Tên Hàng Hóa / Sản Phẩm</th>
               <th style="width: 60px;">ĐVT</th>
-              <th style="width: 90px;">Vị Trí</th>
-              <th style="width: 90px;">Số Lượng</th>
-              <th style="width: 90px;">Đơn Giá</th>
-              <th style="width: 110px;">Thành Tiền</th>
+              <th style="width: 80px;">Vị Trí</th>
+              <th style="width: 80px;">Số Lượng</th>
+              <th style="width: 60px;">Net (kg)</th>
+              <th style="width: 85px;">Tổng Net (kg)</th>
+              <th style="width: 80px;">Đơn Giá</th>
+              <th style="width: 105px;">Thành Tiền</th>
               <th>Ghi Chú</th>
             </tr>
           </thead>
@@ -375,6 +424,8 @@ export const printPhieuXuat = (ticketInfo, items) => {
             <tr style="font-weight: bold; background-color: #fafafa;">
               <td colspan="4" style="text-align: right;">TỔNG CỘNG:</td>
               <td style="text-align: right; color: #096dd9;">${totalQty.toLocaleString()}</td>
+              <td></td>
+              <td style="text-align: right; color: #13c2c2;">${Math.round(totalNetWeight * 100) / 100} kg</td>
               <td></td>
               <td style="text-align: right; color: #d4380d;">${totalPrice.toLocaleString()} đ</td>
               <td></td>
@@ -404,20 +455,26 @@ export const exportExcelPhieuXuat = (ticketInfo, items) => {
 
   let csvContent = '\uFEFF';
   csvContent += `PHIẾU XUẤT KHO: ${ticketInfo?.so_phieu || ''}\n`;
-  csvContent += `Ngày: ${ticketInfo?.date || ''} - Người nhận: ${ticketInfo?.receiver_name || ticketInfo?.customer_name || ''}\n\n`;
-  csvContent += 'STT,Tên Sản Phẩm,ĐVT,Vị Trí,Số Lượng,Đơn Giá,Thành Tiền,Ghi Chú\n';
+  csvContent += `Ngày: ${ticketInfo?.date || ''} | Người nhận: ${ticketInfo?.receiver_name || ticketInfo?.customer_name || ''} | Xe: ${ticketInfo?.vehicle || '-'}\n\n`;
+  csvContent += 'STT,Tên Sản Phẩm,ĐVT,Vị Trí,Số Lượng,Net (kg),Tổng Net (kg),Đơn Giá,Thành Tiền,Ghi Chú\n';
 
   items.forEach((item, index) => {
     const qty = Number(item.so_luong) || 0;
+    const net = Number(item.net) || 1;
     const price = Number(item.price) || 0;
+    const tongNet = Math.round(qty * net * 100) / 100;
+    const totalAmount = qty * net * price;
+
     const row = [
       index + 1,
       `"${(item.product_name || '').replace(/"/g, '""')}"`,
-      `"${item.dvt || ''}"`,
+      `"${item.dvt || 'Thùng'}"`,
       `"${(item.position_name || item.pos || '').replace(/"/g, '""')}"`,
       qty,
+      net,
+      tongNet,
       price,
-      qty * price,
+      totalAmount,
       `"${(item.note || '').replace(/"/g, '""')}"`,
     ];
     csvContent += row.join(',') + '\n';
