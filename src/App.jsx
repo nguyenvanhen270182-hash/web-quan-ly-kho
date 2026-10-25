@@ -313,67 +313,91 @@ export default function App() {
       return isExactChosen ? current === keyword : current.includes(keyword);
     };
 
-    if (filterType === 'STOCK') {
+if (filterType === 'STOCK') {
       const stockMap = new Map();
 
+      // 1. Lưu toàn bộ các mẻ nhập vào Map (khóa gồm Tên sản phẩm + Vị trí + Ngày nhập)
       transactions.forEach((row) => {
         const t = (row.type || '').toUpperCase();
-        const prodName = (row.product_name || '').trim();
-        const posName = (row.position_name || row.pos || 'KHO_CHINH').trim();
+        if (t === 'IN' || t === 'NHẬP' || t === 'ADJUST_IN') {
+          const prodName = (row.product_name || '').trim();
+          const posName = (row.position_name || row.pos || 'KHO_CHINH').trim();
+          const itemDate = row.date || '2026-10-22';
+          const ticketNo = row.so_phieu || 'PN_LE';
 
-        if (!prodName) return;
+          if (!prodName) return;
 
-        const key = `${prodName}_${posName}`;
+          // Khóa kết hợp cả Ngày nhập để định danh đúng mẻ ngày đó
+          const key = `${prodName}_${posName}_${itemDate}_${ticketNo}`;
 
-        if (!stockMap.has(key)) {
           stockMap.set(key, {
             ...row,
             key: key,
             id: `TON_${key}`,
             type: 'STOCK',
-            in_qty: 0,
-            out_qty: 0,
-            adjust_in_qty: 0,
-            adjust_out_qty: 0,
-            so_luong: 0,
-            tong_net: 0,
+            so_luong: Number(row.so_luong || 0),
+            net: Number(row.net || 0),
+            tong_net: Math.round(Number(row.so_luong || 0) * Number(row.net || 0) * 100) / 100,
           });
-        }
-
-        const item = stockMap.get(key);
-        const qty = Number(row.so_luong || 0);
-
-        if (t === 'IN' || t === 'NHẬP') {
-          item.in_qty += qty;
-          item.product_name = row.product_name || item.product_name;
-          item.customer_name = row.customer_name || item.customer_name;
-          item.position_name = row.position_name || item.position_name;
-          item.dvt = row.dvt || item.dvt;
-
-          item.net = Number(row.net || item.net || 0);
-          item.price = Number(row.price || item.price || 0);
-          item.so_phieu = row.so_phieu || item.so_phieu;
-          item.date = row.date || item.date;
-          item.note = row.note || item.note;
-        } else if (t === 'OUT' || t === 'XUẤT') {
-          item.out_qty += qty;
-        } else if (t === 'ADJUST_IN') {
-          item.adjust_in_qty += qty;
-          item.dvt = row.dvt || item.dvt;
-        } else if (t === 'ADJUST_OUT') {
-          item.adjust_out_qty += qty;
         }
       });
 
+      // 2. Duyệt qua các phiếu Xuất: Lấy ngày xuất trừ thẳng vào mẻ nhập có CÙNG NGÀY (hoặc cùng sản phẩm trong ngày đó)
+      const exportTxs = transactions.filter((row) => {
+        const t = (row.type || '').toUpperCase();
+        return t === 'OUT' || t === 'XUẤT' || t === 'ADJUST_OUT';
+      });
+
+      exportTxs.forEach((expRow) => {
+        const expProd = (expRow.product_name || '').trim().toLowerCase();
+        const expDate = expRow.date; // Ngày xuất hàng
+        let expQty = Number(expRow.so_luong || 0);
+
+        // Ưu tiên 1: Trừ vào mẻ nhập đúng CÙNG TÊN SẢN PHẨM và CÙNG NGÀY
+        for (let [key, stockItem] of stockMap.entries()) {
+          if (expQty <= 0) break;
+          const sameProd = stockItem.product_name.trim().toLowerCase() === expProd;
+          const sameDate = stockItem.date === expDate;
+
+          if (sameProd && sameDate && stockItem.so_luong > 0) {
+            if (stockItem.so_luong >= expQty) {
+              stockItem.so_luong -= expQty;
+              expQty = 0;
+            } else {
+              expQty -= stockItem.so_luong;
+              stockItem.so_luong = 0;
+            }
+            stockItem.tong_net = Math.round(stockItem.so_luong * stockItem.net * 100) / 100;
+            stockMap.set(key, stockItem);
+          }
+        }
+
+        // Ưu tiên 2: Nếu ngày xuất không khớp ngày nhập mà vẫn còn dư số lượng xuất, 
+        // trừ tiếp vào các mẻ gần nhất của sản phẩm đó để không bị kẹt số liệu
+        if (expQty > 0) {
+          for (let [key, stockItem] of stockMap.entries()) {
+            if (expQty <= 0) break;
+            const sameProd = stockItem.product_name.trim().toLowerCase() === expProd;
+            if (sameProd && stockItem.so_luong > 0) {
+              if (stockItem.so_luong >= expQty) {
+                stockItem.so_luong -= expQty;
+                expQty = 0;
+              } else {
+                expQty -= stockItem.so_luong;
+                stockItem.so_luong = 0;
+              }
+              stockItem.tong_net = Math.round(stockItem.so_luong * stockItem.net * 100) / 100;
+              stockMap.set(key, stockItem);
+            }
+          }
+        }
+      });
+
+      // 3. Lọc lấy các mẻ còn tồn > 0
       const listStock = [];
       stockMap.forEach((val) => {
-        const tonQty = (val.in_qty + val.adjust_in_qty) - (val.out_qty + val.adjust_out_qty);
-        if (tonQty > 0) {
-          listStock.push({
-            ...val,
-            so_luong: tonQty,
-            tong_net: Math.round(tonQty * (val.net || 0) * 100) / 100,
-          });
+        if (val.so_luong > 0) {
+          listStock.push(val);
         }
       });
 
