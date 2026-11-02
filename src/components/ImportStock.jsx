@@ -249,11 +249,11 @@ export default function ImportStock({ selectedUser, onBack }) {
   };
 
   return (
-    <Card 
-      title={<span style={{ fontWeight: 'bold', fontSize: isMobile ? 16 : 18 }}>PHIẾU NHẬP HÀNG CHI TIẾT</span>} 
+   <Card 
+      title={<span style={{ fontWeight: 'bold', fontSize: isMobile ? 16 : 18, color: '#389e0d' }}>📥 PHIẾU NHẬP HÀNG CHI TIẾT</span>} 
       extra={<Button icon={<LeftOutlined />} onClick={onBack} size={isMobile ? 'small' : 'middle'} style={{ fontWeight: 'bold' }}>Quay lại</Button>}
       bodyStyle={{ padding: isMobile ? '8px' : '16px' }}
-      style={{ maxWidth: 1150, width: '100%', margin: '0 auto', background: '#ffffff', borderRadius: '8px' }}
+      style={{ maxWidth: 1150, width: '100%', margin: '0 auto', background: '#f6ffed', borderRadius: '8px', border: '1px solid #b7eb8f' }}
     >
       <Form 
         form={form} 
