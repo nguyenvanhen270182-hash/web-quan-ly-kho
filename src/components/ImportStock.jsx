@@ -161,6 +161,7 @@ export default function ImportStock({ selectedUser, onBack }) {
   };
 
   // 2. LƯU BẢN GHI VÀ GÁN DỮ LIỆU XUẤT FILE
+// 2. LƯU BẢN GHI, XUẤT FILE VÀ TỰ ĐỘNG LÀM SẠCH FORM CHO PHIẾU TIẾP THEO
   const handleSave = async (values) => {
     if (!values.items || values.items.length === 0) {
       message.warning('Vui lòng thêm ít nhất 1 dòng hàng!');
@@ -220,7 +221,7 @@ export default function ImportStock({ selectedUser, onBack }) {
     } else {
       message.success(`Đã lưu thành công ${insertPayload.length} dòng hàng!`);
       
-      setSavedData({
+      const currentSavedData = {
         soPhieu: values.so_phieu,
         customerName: values.customer_name || 'All',
         soXe: values.so_xe || '',
@@ -230,7 +231,13 @@ export default function ImportStock({ selectedUser, onBack }) {
           position_name: values.position_name,
           customer_name: values.customer_name
         }))
-      });
+      };
+
+      setSavedData(currentSavedData);
+
+      // TỰ ĐỘNG RESET FORM VÀ CẬP NHẬT SỐ PHIẾU KẾ TIẾP NGAY LẬP TỨC
+      form.resetFields();
+      initFormData(); // Hàm này sẽ tự động quét và tăng số phiếu lên (VD: PN050 lên PN051)
     }
     setLoading(false);
   };

@@ -264,6 +264,7 @@ export default function ExportStock({ selectedUser, onBack }) {
     form.setFieldsValue({ items: [...items] });
   };
 
+  // 4. LƯU BẢN GHI, XUẤT FILE VÀ TỰ ĐỘNG LÀM SẠCH FORM CHO PHIẾU XUẤT TIẾP THEO
   const handleSave = async (values) => {
     if (!values.items || values.items.length === 0) {
       messageApi.warning('Vui lòng chọn ít nhất 1 mặt hàng để xuất!');
@@ -339,18 +340,23 @@ export default function ExportStock({ selectedUser, onBack }) {
     } else {
       messageApi.success(`Đã xuất thành công ${insertPayload.length} dòng hàng!`);
       
-      setSavedData({
+      const currentSavedData = {
         soPhieu: values.so_phieu,
         giamSat: values.giam_sat || '',
         soXe: values.so_xe || '',
         ngayGiaoDich: dateFormatted,
         nguoiNhan: values.receiver_name || '',
         items: values.items
-      });
+      };
+
+      setSavedData(currentSavedData);
+
+      // TỰ ĐỘNG LÀM SẠCH FORM VÀ CẬP NHẬT SỐ PHIẾU XUẤT TIẾP THEO NGAY LẬP TỨC
+      form.resetFields();
+      initFormData(); // Tự động tăng số phiếu xuất (VD: PX001 lên PX002)
     }
     setLoading(false);
   };
-
   const handleClearForm = () => {
     form.resetFields();
     setSavedData(null);
