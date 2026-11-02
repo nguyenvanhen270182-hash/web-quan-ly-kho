@@ -332,7 +332,9 @@ export default function ImportStock({ selectedUser, onBack }) {
                   key={key} 
                   size="small" 
                   bodyStyle={{ padding: isMobile ? '8px' : '12px' }}
+                  
                   title={<Text strong style={{ fontSize: isMobile ? 13 : 14 }}>Dòng hàng #{index + 1}</Text>}
+
                   extra={
                     fields.length > 1 && (
                       <Button type="text" danger size="small" icon={<DeleteOutlined />} onClick={() => remove(name)}>
