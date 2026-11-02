@@ -550,17 +550,19 @@ export default function ExportStock({ selectedUser, onBack }) {
                   <Card 
                     key={key} 
                     size="small" 
-                    bodyStyle={{ padding: isMobile ? '8px' : '12px' }}
+                    bodyStyle={{ padding: isMobile ? '8px' : '12px',  backgroundColor: '#f8e9d2' }}
                     title={
-                      <Space wrap size={[4, 4]}>
-                        <Text strong style={{ fontSize: isMobile ? 13 : 14 }}>#{index + 1}. {itemData.product_name}</Text>
-                        <Tag color="blue" style={{ fontSize: 11 }}>Chủ: {itemData.customer_name || 'N/A'}</Tag>
-                        <Tag color="cyan" style={{ fontSize: 11 }}>Vị trí: {itemData.position_name || 'N/A'}</Tag>
-                        <Tag color={remainingTon < 0 ? 'red' : 'orange'} style={{ fontWeight: 'bold', fontSize: 11 }}>
-                          Còn: {remainingTon} / {originTon} {itemData.dvt}
-                        </Tag>
-                      </Space>
-                    }
+                          <Space wrap size={[4, 4]}>
+                            <Text strong style={{ fontSize: isMobile ? 15 : 17, color: '#0958d9', backgroundColor: '#e6f7ff', padding: '3px 10px', borderRadius: '4px', border: '1px solid #91caff' }}>
+                              📦 Dòng hàng #{index + 1}
+                            </Text>
+                            <Tag color="blue" style={{ fontSize: 11 }}>Chủ: {itemData.customer_name || 'N/A'}</Tag>
+                            <Tag color="cyan" style={{ fontSize: 11 }}>Vị trí: {itemData.position_name || 'N/A'}</Tag>
+                            <Tag color={remainingTon < 0 ? 'red' : 'orange'} style={{ fontWeight: 'bold', fontSize: 11 }}>
+                              Còn: {remainingTon} / {originTon} {itemData.dvt}
+                            </Tag>
+                          </Space>
+                        }
                     extra={
                       <Button type="text" danger size="small" icon={<DeleteOutlined />} onClick={() => remove(name)}>
                         Xóa
